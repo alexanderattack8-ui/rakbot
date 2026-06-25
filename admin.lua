@@ -100,7 +100,7 @@ local auto_replies = {
     ["pul bering"] = "Assalomu aleykum, keyingi off-top uchun jazo qo'llaniladi.",
     ["qayerda"] = "Assalomu alaykum, planshet Planshet orqali qidirib topishingiz mumkin.",
     ["topib ber"] = "Assalomu alaykum, planshet Planshet orqali qidirib topishingiz mumkin.",
-	["kishan", "bog'lab "] = "Assalomu aleykum, administrator bunday jarayonlarga aralashmaydi."
+	["kishan", "bog'lab"] = "Assalomu aleykum, administrator bunday jarayonlarga aralashmaydi."
 	
 }
 
