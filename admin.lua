@@ -8,7 +8,7 @@ local math = require("math")
 local os = require("os")
 
 -- ================= GITHUB YANGILANISH SOZLAMALARI =================
-local script_version = 1.9 
+local script_version = 2.1 
 local script_name_file = "admin.lua" 
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 local script_download_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/admin.lua"
@@ -80,20 +80,28 @@ end
 
 local red_admins = { ["Maga_By"] = true, ["Ivan_Vasilyev"] = true, ["John_Medvedev"] = true, ["Ace_Alonso"] = true }
 
+-- KALIT SO'ZLAR (LUG'AT) BOYITILDI
 local auto_replies = {
-    ["qachon warn"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
-    ["warn qachon"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
-    ["qancha warn"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
+    ["qachon warn"] = "Assalomu alaykum, statisika orqali ko'rishingiz mumkun.",
+    ["warn qachon"] = "Assalomu alaykum, statisika orqali ko'rishingiz mumkun.",
+    ["qancha warn"] = "Assalomu alaykum, statisika orqali ko'rishingiz mumkun.",
     ["yordam"] = "Assalomu aleykum, kuzatyapman.",
     ["tuzatib bering"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
     ["remont"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
     ["buzildi"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
     ["tutayapti"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
+    ["chin"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
+    ["pochinit"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
+    ["moshinam"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
     ["nega qamadingiz"] = "Assalomu aleykum, dalil bilan shikoyat yozing.",
     ["meni aybim yo'q"] = "Assalomu aleykum, dalil bilan shikoyat yozing.",
     ["yeching"] = "Assalomu aleykum, administrator bunday jarayonlarga aralashmaydi.",
     ["sababsiz"] = "Assalomu aleykum, dalil bilan shikoyat yozing.",
-    ["pul bering"] = "Assalomu aleykum, keyingi off-top uchun jazo qo'llaniladi."
+    ["pul bering"] = "Assalomu aleykum, keyingi off-top uchun jazo qo'llaniladi.",
+    ["qayerda"] = "Assalomu alaykum, planshet Planshet orqali qidirib topishingiz mumkin.",
+    ["topib ber"] = "Assalomu alaykum, planshet Planshet orqali qidirib topishingiz mumkin.",
+	["kishan", "bog'lab "] = "Assalomu aleykum, administrator bunday jarayonlarga aralashmaydi."
+	
 }
 
 local is_wandering = false
@@ -115,7 +123,7 @@ local allowed_cmds = {
     ["/unmute"] = true, ["/offunmute"] = true
 }
 
-function isRPNick(name) return string.match(name, "^%u%l+_%u%l+$") ~= nil end
+function isRPNick(name) return string.match(name, "^%u%a+_%u%a+$") ~= nil end
 
 function sendTG(text)
     if bot_token == "" or bot_chatid == "" then return end
@@ -124,7 +132,6 @@ function sendTG(text)
     newTask(function() pcall(function() requests.post("https://api.telegram.org/bot" .. bot_token .. "/sendMessage", {headers = headers, data = json.encode(payload), timeout = 3}) end) end)
 end
 
--- GITHUB ORQALI AVTO-YANGILANISH FUNKSIYASI (FIXED)
 function checkUpdates()
     print("[UPDATE] Yangilanishlar tekshirilmoqda...")
     newTask(function()
@@ -172,10 +179,10 @@ function askChatGPT(system_prompt, user_text)
     return nil
 end
 
-function getSmartReply(text)
+function getSmartReply(text, sender_name)
     local lower_text = text:lower()
     if lower_text:find("rp") and (lower_text:find("nik") or lower_text:find("nick")) then
-        local target_name = text:match("([%w_]+)%s+rp") or text:match("([%w_]+)")
+        local target_name = text:match("(%u%a+_%u%a+)") or sender_name
         if target_name then
             if isRPNick(target_name) then return "Assalomu alaykum, ha, bu RP nik."
             else return "Assalomu alaykum, yo'q, bu Non-RP (NRP) nik." end
@@ -231,7 +238,7 @@ function telegramPolling()
                             if txt:match("^/[%w_]+") then
                                 sendInput(txt); sendTG("⏳ Buyruq serverga yuborildi:\n`" .. txt .. "`\n*Javob kutilmoqda...*"); tg_capture_timer = os.clock() + 3.0 
                             elseif txt:lower() == "!cmd" then 
-                                sendTG("🤖 **" .. bot_name .. " - MENYU (v1.9)** 🤖\n\n📊 `/stats` - Ish hisobotlari\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Bot joylashuvi\n💬 `!a [matn]` - Admin chatga yozish\n📢 `!say [matn]` - Oddiy chatga yozish\n🛌 `!pause [daq]` - O'yindan chiqish\n🟢 `!wake` - Serverga ulanish\n▶️ `!resume` - Qayta ishlash")
+                                sendTG("🤖 **" .. bot_name .. " - MENYU (v2.1)** 🤖\n\n📊 `/stats` - Ish hisobotlari\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Bot joylashuvi\n💬 `!a [matn]` - Admin chatga yozish\n📢 `!say [matn]` - Oddiy chatga yozish\n🛌 `!pause [daq]` - O'yindan chiqish\n🟢 `!wake` - Serverga ulanish\n▶️ `!resume` - Qayta ishlash")
                             elseif txt:lower() == "!admins" then
                                 checking_admins = true; online_admins_table = {}; sendInput("/admins"); sendTG("🔍 Adminlar ro'yxati olinmoqda...")
                                 newTask(function()
@@ -423,22 +430,29 @@ function sampev.onServerMessage(color, text)
             else
                 newTask(function()
                     wait(4000)
-                    local final_reply = getSmartReply(rep_text)
+                    local final_reply = getSmartReply(rep_text, rep_name)
                     if not final_reply then
-                        -- BOT NOMI O'ZGARUVCHISI SYSTEM PROMPTGA BIRIKTIRILDI
+                        -- AI QOIDALARI YANADA KUCHAYTIRILDI
                         local admin_system_prompt = string.format([[
 Siz SA-MP serverining o'zbek administratori "%s"siz. Reportlarga qat'iy, rasmiy va faqat 1 ta gap bilan javob bering.
 QOIDALAR:
-1. Agar o'yinchi joylashuv (Hokimiyat, bozor, kazino qayerda) so'rasa: "Assalomu alaykum, qidirayotgan joyingizni /gps orqali topishingiz mumkin."
-2. Agar o'yinchi kimgadir shikoyat qilsa (DM, DB, uryapti, so'kyapti, id): "Assalomu alaykum, ushbu o'yinchini kuzatishni boshladim."
-3. Agar o'yinchi pul, mashina yoki narx so'rasa: "Assalomu alaykum, bu RP jarayon, o'zingiz bilib olishingiz kerak."
-4. Shaxsiy qoida o'ylab topmang, aniq va qisqa javob bering.
+1. Agar o'yinchi joylashuv (qayerda, qanday boraman, topib ber) so'rasa: "Assalomu alaykum, qidirayotgan joyingizni planshet (/gps) orqali topishingiz mumkin."
+2. Agar mashinasi haqida (moshinamni tuzatib ber, chin, buzildi, remont) yozsa: "Assalomu alaykum, spidometrdagi evakuator tugmasini bosing."
+3. Agar o'yinchi kimgadir shikoyat qilsa (DM, DB, uryapti, so'kyapti, id): "Assalomu alaykum, ushbu o'yinchini kuzatishni boshladim."
+4. Agar o'yinchi pul, mashina, donat yoki narx so'rasa: "Assalomu alaykum, bu RP jarayon, o'zingiz bilib olishingiz kerak."
+5. Shaxsiy qoida o'ylab topmang, aniq va qisqa javob bering.
 ]], bot_name)
                         final_reply = askChatGPT(admin_system_prompt, rep_text)
                         
+                        -- Agar internet uzilsa yoki AI javob bera olmasa, ehtiyot qismlar
                         if not final_reply or final_reply == "" then
-                            if rep_text:lower():find("qayerda") then final_reply = "Assalomu alaykum, /gps orqali topishingiz mumkin."
-                            else final_reply = "Assalomu Alaykum, sizni kuzatmoqdaman" end
+                            if rep_text:lower():find("qayer") or rep_text:lower():find("topib") then 
+                                final_reply = "Assalomu alaykum, planshet (/gps) orqali qidirib topishingiz mumkin."
+                            elseif rep_text:lower():find("chin") or rep_text:lower():find("moshin") then
+                                final_reply = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing."
+                            else 
+                                final_reply = "Assalomu Alaykum, sizni kuzatmoqdaman." 
+                            end
                         end
                         
                         if final_reply:find("kuzatishni boshladim") then
@@ -551,7 +565,7 @@ function onLoad()
             end
         end)
         
-        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v1.9)") 
+        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v2.1)") 
     else 
         print("[XATO] Botingiz nomi " .. bot_name .. " emas! Ismni o'zgartiring.") 
     end
