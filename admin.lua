@@ -8,7 +8,7 @@ local math = require("math")
 local os = require("os")
 
 -- ================= GITHUB YANGILANISH SOZLAMALARI =================
-local script_version = 2.2 
+local script_version = 2.3 
 local script_name_file = "admin.lua" 
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 local script_download_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/admin.lua"
@@ -127,31 +127,19 @@ function sendTG(text)
     if bot_token == "" or bot_chatid == "" then return end
     local payload = { chat_id = bot_chatid, text = text, parse_mode = "Markdown" }
     local headers = {["Content-Type"] = "application/json"}
-    newTask(function() pcall(function() requests.post("https://api.telegram.org/bot" .. bot_token .. "/sendMessage", {headers = headers, data = json.encode(payload), timeout = 3}) end) end)
+    newTask(function() pcall(function() requests.post("https://api.telegram.org/bot" .. bot_token .. "/sendMessage", {headers = headers, data = json.encode(payload), timeout = 2}) end) end)
 end
 
+-- ================= QOTISHNING OLDINI OLISH UCHUN UPDATE MANTIQI O'ZGARDI =================
 function checkUpdates()
     print("[UPDATE] Yangilanishlar tekshirilmoqda...")
     newTask(function()
-        local success, response = pcall(function() return requests.get(update_info_url, {timeout = 5}) end)
+        local success, response = pcall(function() return requests.get(update_info_url, {timeout = 3}) end)
         if success and response and response.status_code == 200 then
             local data = json.decode(response.text)
             if data and data.version and tonumber(data.version) > script_version then
                 print("[UPDATE] Yangi versiya topildi: v" .. data.version)
-                sendTG("🔄 **Yangi versiya topildi!** (`v" .. data.version .. "`)\nYuklab olinmoqda...")
-                
-                local dl_success, dl_response = pcall(function() return requests.get(script_download_url, {timeout = 10}) end)
-                if dl_success and dl_response and dl_response.status_code == 200 then
-                    local f = io.open("scripts\\temp_update.lua", "w")
-                    if f then
-                        f:write(dl_response.text)
-                        f:close()
-                        os.remove("scripts\\" .. script_name_file)
-                        os.rename("scripts\\temp_update.lua", "scripts\\" .. script_name_file)
-                        print("[UPDATE] Muvaffaqiyatli yangilandi! RakSAMPni qayta ishga tushiring.")
-                        sendTG("✅ **Bot yangilandi!** Skript yangi versiyaga o'tdi.")
-                    end
-                end
+                sendTG("🔄 **Yangi versiya chiqdi! (v" .. data.version .. ")**\nFaylni avtomatik almashtirish botni qotirayotgani uchun o'chirildi. Iltimos, yangi kodni GitHub'dan qo'lda oling.")
             else
                 print("[UPDATE] Bot eng so'nggi versiyada ishlamoqda (v" .. script_version .. ").")
             end
@@ -161,15 +149,12 @@ function checkUpdates()
     end)
 end
 
--- ================= AI KODLARI KUCHAYTIRILDI =================
 function askChatGPT(system_prompt, user_text)
     if openai_key == "" or ai_busy then return nil end
     ai_busy = true
     
-    -- Xavfsizlik uchun JSON ni buzishi mumkin bo'lgan belgilarni tozalaymiz
     local safe_user_text = user_text:gsub('"', ''):gsub('\\', '')
     
-    -- temperature = 0.1 (Faqat qat'iy qoidalarga amal qiladi, ijod qilmaydi)
     local payload = { 
         model = "gpt-3.5-turbo", 
         messages = { 
@@ -181,7 +166,8 @@ function askChatGPT(system_prompt, user_text)
     }
     
     local headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. openai_key }
-    local success, response = pcall(function() return requests.post("https://api.openai.com/v1/chat/completions", {headers = headers, data = json.encode(payload), timeout = 5.0}) end)
+    -- Timeout 3.0 ga tushirildi (qotishning oldini olish uchun)
+    local success, response = pcall(function() return requests.post("https://api.openai.com/v1/chat/completions", {headers = headers, data = json.encode(payload), timeout = 3.0}) end)
     
     ai_busy = false
     if success and response and response.status_code == 200 then
@@ -236,12 +222,15 @@ function spectateRandomPlayer()
     else sendInput("/sp " .. (math.random(1, 50))) end
 end
 
+-- ================= TELEGRAM POLLING OPTIMIZATSIYASI =================
 function telegramPolling()
     local update_id = 0
     newTask(function()
         while true do
-            wait(3000) 
-            local success, res = pcall(function() return requests.get("https://api.telegram.org/bot" .. bot_token .. "/getUpdates?offset=" .. (update_id + 1), {timeout = 2}) end)
+            -- Kutish vaqti uzaytirildi (bot harakatini uzib qo'ymaslik uchun)
+            wait(5000) 
+            -- Timeout 1 soniyaga tushirildi
+            local success, res = pcall(function() return requests.get("https://api.telegram.org/bot" .. bot_token .. "/getUpdates?offset=" .. (update_id + 1), {timeout = 1}) end)
             if success and res and res.status_code == 200 then
                 local decoded = json.decode(res.text)
                 if decoded.ok and #decoded.result > 0 then
@@ -252,7 +241,7 @@ function telegramPolling()
                             if txt:match("^/[%w_]+") then
                                 sendInput(txt); sendTG("⏳ Buyruq serverga yuborildi:\n`" .. txt .. "`\n*Javob kutilmoqda...*"); tg_capture_timer = os.clock() + 3.0 
                             elseif txt:lower() == "!cmd" then 
-                                sendTG("🤖 **" .. bot_name .. " - MENYU (v2.2)** 🤖\n\n📊 `/stats` - Ish hisobotlari\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Bot joylashuvi\n💬 `!a [matn]` - Admin chatga yozish\n📢 `!say [matn]` - Oddiy chatga yozish\n🛌 `!pause [daq]` - O'yindan chiqish\n🟢 `!wake` - Serverga ulanish\n▶️ `!resume` - Qayta ishlash")
+                                sendTG("🤖 **" .. bot_name .. " - MENYU (v2.3)** 🤖\n\n📊 `/stats` - Ish hisobotlari\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Bot joylashuvi\n💬 `!a [matn]` - Admin chatga yozish\n📢 `!say [matn]` - Oddiy chatga yozish\n🛌 `!pause [daq]` - O'yindan chiqish\n🟢 `!wake` - Serverga ulanish\n▶️ `!resume` - Qayta ishlash")
                             elseif txt:lower() == "!admins" then
                                 checking_admins = true; online_admins_table = {}; sendInput("/admins"); sendTG("🔍 Adminlar ro'yxati olinmoqda...")
                                 newTask(function()
@@ -446,7 +435,6 @@ function sampev.onServerMessage(color, text)
                     wait(4000)
                     local final_reply = getSmartReply(rep_text, rep_name)
                     if not final_reply then
-                        -- ================= AI KUCHAYTIRILDI =================
                         local admin_system_prompt = string.format([[
 Siz SA-MP serverining bot-administratorisiz. Ismingiz "%s". 
 Sizning vazifangiz o'yinchining savolini o'qib, unga FAQAT quyidagi qoidalarga mos keluvchi 1 ta aniq javobni yuborish. Hech qanday izoh yoki qo'shimcha so'z yozmang!
@@ -581,7 +569,7 @@ function onLoad()
             end
         end)
         
-        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v2.2)") 
+        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v2.3)") 
     else 
         print("[XATO] Botingiz nomi " .. bot_name .. " emas! Ismni o'zgartiring.") 
     end
