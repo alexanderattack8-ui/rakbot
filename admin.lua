@@ -8,7 +8,7 @@ local math = require("math")
 local os = require("os")
 
 -- ================= GITHUB YANGILANISH SOZLAMALARI =================
-local script_version = 2.1 
+local script_version = 2.2 
 local script_name_file = "admin.lua" 
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 local script_download_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/admin.lua"
@@ -80,11 +80,11 @@ end
 
 local red_admins = { ["Maga_By"] = true, ["Ivan_Vasilyev"] = true, ["John_Medvedev"] = true, ["Ace_Alonso"] = true }
 
--- KALIT SO'ZLAR (LUG'AT) BOYITILDI
+-- KALIT SO'ZLAR (LUG'AT)
 local auto_replies = {
-    ["qachon warn"] = "Assalomu alaykum, statisika orqali ko'rishingiz mumkun.",
-    ["warn qachon"] = "Assalomu alaykum, statisika orqali ko'rishingiz mumkun.",
-    ["qancha warn"] = "Assalomu alaykum, statisika orqali ko'rishingiz mumkun.",
+    ["qachon warn"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
+    ["warn qachon"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
+    ["qancha warn"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
     ["yordam"] = "Assalomu aleykum, kuzatyapman.",
     ["tuzatib bering"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
     ["remont"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
@@ -98,10 +98,8 @@ local auto_replies = {
     ["yeching"] = "Assalomu aleykum, administrator bunday jarayonlarga aralashmaydi.",
     ["sababsiz"] = "Assalomu aleykum, dalil bilan shikoyat yozing.",
     ["pul bering"] = "Assalomu aleykum, keyingi off-top uchun jazo qo'llaniladi.",
-    ["qayerda"] = "Assalomu alaykum, planshet Planshet orqali qidirib topishingiz mumkin.",
-    ["topib ber"] = "Assalomu alaykum, planshet Planshet orqali qidirib topishingiz mumkin.",
-	["kishan"] = "Assalomu aleykum, administrator bunday jarayonlarga aralashmaydi.",
-	["bog'lab"] = "Assalomu aleykum, administrator bunday jarayonlarga aralashmaydi."
+    ["qayerda"] = "Assalomu alaykum, planshet (/gps) orqali qidirib topishingiz mumkin.",
+    ["topib ber"] = "Assalomu alaykum, planshet (/gps) orqali qidirib topishingiz mumkin."
 }
 
 local is_wandering = false
@@ -163,12 +161,28 @@ function checkUpdates()
     end)
 end
 
+-- ================= AI KODLARI KUCHAYTIRILDI =================
 function askChatGPT(system_prompt, user_text)
     if openai_key == "" or ai_busy then return nil end
     ai_busy = true
-    local payload = { model = "gpt-3.5-turbo", messages = { {role = "system", content = system_prompt}, {role = "user", content = user_text} }, max_tokens = 80, temperature = 0.5 }
+    
+    -- Xavfsizlik uchun JSON ni buzishi mumkin bo'lgan belgilarni tozalaymiz
+    local safe_user_text = user_text:gsub('"', ''):gsub('\\', '')
+    
+    -- temperature = 0.1 (Faqat qat'iy qoidalarga amal qiladi, ijod qilmaydi)
+    local payload = { 
+        model = "gpt-3.5-turbo", 
+        messages = { 
+            {role = "system", content = system_prompt}, 
+            {role = "user", content = safe_user_text} 
+        }, 
+        max_tokens = 60, 
+        temperature = 0.1 
+    }
+    
     local headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. openai_key }
     local success, response = pcall(function() return requests.post("https://api.openai.com/v1/chat/completions", {headers = headers, data = json.encode(payload), timeout = 5.0}) end)
+    
     ai_busy = false
     if success and response and response.status_code == 200 then
         local data = json.decode(response.text)
@@ -238,7 +252,7 @@ function telegramPolling()
                             if txt:match("^/[%w_]+") then
                                 sendInput(txt); sendTG("⏳ Buyruq serverga yuborildi:\n`" .. txt .. "`\n*Javob kutilmoqda...*"); tg_capture_timer = os.clock() + 3.0 
                             elseif txt:lower() == "!cmd" then 
-                                sendTG("🤖 **" .. bot_name .. " - MENYU (v2.1)** 🤖\n\n📊 `/stats` - Ish hisobotlari\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Bot joylashuvi\n💬 `!a [matn]` - Admin chatga yozish\n📢 `!say [matn]` - Oddiy chatga yozish\n🛌 `!pause [daq]` - O'yindan chiqish\n🟢 `!wake` - Serverga ulanish\n▶️ `!resume` - Qayta ishlash")
+                                sendTG("🤖 **" .. bot_name .. " - MENYU (v2.2)** 🤖\n\n📊 `/stats` - Ish hisobotlari\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Bot joylashuvi\n💬 `!a [matn]` - Admin chatga yozish\n📢 `!say [matn]` - Oddiy chatga yozish\n🛌 `!pause [daq]` - O'yindan chiqish\n🟢 `!wake` - Serverga ulanish\n▶️ `!resume` - Qayta ishlash")
                             elseif txt:lower() == "!admins" then
                                 checking_admins = true; online_admins_table = {}; sendInput("/admins"); sendTG("🔍 Adminlar ro'yxati olinmoqda...")
                                 newTask(function()
@@ -432,19 +446,21 @@ function sampev.onServerMessage(color, text)
                     wait(4000)
                     local final_reply = getSmartReply(rep_text, rep_name)
                     if not final_reply then
-                        -- AI QOIDALARI YANADA KUCHAYTIRILDI
+                        -- ================= AI KUCHAYTIRILDI =================
                         local admin_system_prompt = string.format([[
-Siz SA-MP serverining o'zbek administratori "%s"siz. Reportlarga qat'iy, rasmiy va faqat 1 ta gap bilan javob bering.
-QOIDALAR:
-1. Agar o'yinchi joylashuv (qayerda, qanday boraman, topib ber) so'rasa: "Assalomu alaykum, qidirayotgan joyingizni planshet (/gps) orqali topishingiz mumkin."
-2. Agar mashinasi haqida (moshinamni tuzatib ber, chin, buzildi, remont) yozsa: "Assalomu alaykum, spidometrdagi evakuator tugmasini bosing."
-3. Agar o'yinchi kimgadir shikoyat qilsa (DM, DB, uryapti, so'kyapti, id): "Assalomu alaykum, ushbu o'yinchini kuzatishni boshladim."
-4. Agar o'yinchi pul, mashina, donat yoki narx so'rasa: "Assalomu alaykum, bu RP jarayon, o'zingiz bilib olishingiz kerak."
-5. Shaxsiy qoida o'ylab topmang, aniq va qisqa javob bering.
+Siz SA-MP serverining bot-administratorisiz. Ismingiz "%s". 
+Sizning vazifangiz o'yinchining savolini o'qib, unga FAQAT quyidagi qoidalarga mos keluvchi 1 ta aniq javobni yuborish. Hech qanday izoh yoki qo'shimcha so'z yozmang!
+
+1-QOIDA (Joylashuv: qayerda, topib ber, qanday boraman): "Assalomu alaykum, qidirayotgan joyingizni planshet (/gps) orqali topishingiz mumkin."
+2-QOIDA (Mashina: tuzat, chin, buzildi, remont, evakuator): "Assalomu alaykum, spidometrdagi evakuator tugmasini bosing."
+3-QOIDA (Shikoyat: DM, DB, id, uryapti, so'kyapti, qamang, jazo bering): "Assalomu alaykum, ushbu o'yinchini kuzatishni boshladim."
+4-QOIDA (O'yin jarayoni: pul ber, mashina narxi, qanday ishlayman): "Assalomu alaykum, bu RP jarayon, o'zingiz bilib olishingiz kerak."
+5-QOIDA (Boshqa barcha savollar uchun): "Assalomu Alaykum, sizni kuzatmoqdaman."
+
+Qat'iy talab: Faqat qo'shtirnoq ichidagi matnni qaytaring, boshqa hech narsa yozmang!
 ]], bot_name)
                         final_reply = askChatGPT(admin_system_prompt, rep_text)
                         
-                        -- Agar internet uzilsa yoki AI javob bera olmasa, ehtiyot qismlar
                         if not final_reply or final_reply == "" then
                             if rep_text:lower():find("qayer") or rep_text:lower():find("topib") then 
                                 final_reply = "Assalomu alaykum, planshet (/gps) orqali qidirib topishingiz mumkin."
@@ -565,7 +581,7 @@ function onLoad()
             end
         end)
         
-        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v2.1)") 
+        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v2.2)") 
     else 
         print("[XATO] Botingiz nomi " .. bot_name .. " emas! Ismni o'zgartiring.") 
     end
