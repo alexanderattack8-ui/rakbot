@@ -8,13 +8,13 @@ local math = require("math")
 local os = require("os")
 
 -- ================= GITHUB YANGILANISH SOZLAMALARI =================
-local script_version = 2.4 
+local script_version = 2.5 
 local script_name_file = "admin.lua" 
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 local script_download_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/admin.lua"
 -- ==================================================================
 
--- CONFIG.TXT DAN MA'LUMOTLARNI YUKLASH
+-- CONFIG.TXT DAN MA'LUMOTLARNI YUKLASH (SOATLAR QO'SHILDI)
 local cfg = ini.load({
     settings = { 
         bot_name = "", 
@@ -24,8 +24,13 @@ local cfg = ini.load({
         openai_key = "" 
     },
     stats = {
-        Dushanba = 0, Seshanba = 0, Chorshanba = 0,
-        Payshanba = 0, Juma = 0, Shanba = 0, Yakshanba = 0,
+        Dushanba = 0, Dushanba_soat = 0,
+        Seshanba = 0, Seshanba_soat = 0,
+        Chorshanba = 0, Chorshanba_soat = 0,
+        Payshanba = 0, Payshanba_soat = 0,
+        Juma = 0, Juma_soat = 0,
+        Shanba = 0, Shanba_soat = 0,
+        Yakshanba = 0, Yakshanba_soat = 0,
         start_time = os.time()
     }
 }, "settings\\config.txt")
@@ -39,7 +44,7 @@ local openai_key = tostring(cfg.settings.openai_key):match("^%s*(.-)%s*$") or ""
 -- XOTIRA VA LUG'ATLAR
 local memory_file = "settings\\" .. bot_name:lower() .. "_memory.json"
 local bot_memory = {}
-local pending_reports = {} -- O'rganish uchun kutilayotgan reportlar
+local pending_reports = {} 
 local report_queue = {} 
 local sp_queue = {} 
 local is_spectating = false
@@ -200,7 +205,6 @@ end
 function getSmartReply(text, sender_name)
     local lower_text = text:lower()
     
-    -- RP Nick check
     if lower_text:find("rp") and (lower_text:find("nik") or lower_text:find("nick")) then
         local target_name = text:match("(%u%a+_%u%a+)") or sender_name
         if target_name then
@@ -212,14 +216,12 @@ function getSmartReply(text, sender_name)
         end
     end
     
-    -- Auto Replies Check
     for key, reply in pairs(auto_replies) do
         if lower_text:find(key, 1, true) then 
             return reply 
         end
     end
     
-    -- Machine Learning (Xotira) Check
     for question, answer in pairs(bot_memory) do
         if lower_text:find(question, 1, true) or question:find(lower_text, 1, true) then 
             return answer 
@@ -273,6 +275,7 @@ function spectateRandomPlayer()
     end
 end
 
+-- ================= TELEGRAM XABARLAR (STATS VA RESET) =================
 function telegramPolling()
     local update_id = 0
     newTask(function()
@@ -298,7 +301,7 @@ function telegramPolling()
                                 tg_capture_timer = os.clock() + 3.0 
                                 
                             elseif txt:lower() == "!cmd" then 
-                                sendTG("🤖 **MENYU (v2.4)**\n📊 `/stats` - Hisobotlar\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Joylashuv\n💬 `!a [matn]` - Admin chat\n🛌 `!pause [daq]` - Uxlash")
+                                sendTG("🤖 **MENYU (v2.5)**\n📊 `/stats` - Haftalik hisobot\n🔄 `!reset` - Hisobotni 0 qilish\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Joylashuv\n💬 `!a [matn]` - Admin chat\n🛌 `!pause [daq]` - Uxlash")
                                 
                             elseif txt:lower() == "!admins" then
                                 checking_admins = true
@@ -312,8 +315,26 @@ function telegramPolling()
                                 end)
                                 
                             elseif txt:lower() == "/stats" or txt:lower() == "!stats" then
-                                local uptime = math.floor((os.time() - cfg.stats.start_time) / 3600)
-                                sendTG("📊 **KUNLIK HISOBOT:**\nUptime: `" .. uptime .. " soat`")
+                                local msg = "📊 **HAFTALIK HISOBOT:**\n\n"
+                                local kunlar = {"Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"}
+                                
+                                for _, day in ipairs(kunlar) do
+                                    local rp = cfg.stats[day] or 0
+                                    local soat = cfg.stats[day .. "_soat"] or 0
+                                    msg = msg .. "📅 *" .. day .. ":* Rep `" .. rp .. "` | Soat `" .. soat .. "`\n"
+                                end
+                                
+                                sendTG(msg)
+                            
+                            elseif txt:lower() == "!reset" then
+                                local kunlar = {"Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"}
+                                for _, day in ipairs(kunlar) do
+                                    cfg.stats[day] = 0
+                                    cfg.stats[day .. "_soat"] = 0
+                                end
+                                cfg.stats.start_time = os.time()
+                                ini.save(cfg, "settings\\config.txt")
+                                sendTG("✅ **Barcha haftalik hisobotlar 0 dan boshlandi!**")
                                 
                             elseif txt:match("^!pause%s+(%d+)") then
                                 local mins = tonumber(txt:match("^!pause%s+(%d+)"))
@@ -375,6 +396,18 @@ function sampev.onServerMessage(color, text)
             sendTG("📩 **Server:**\n`" .. clean .. "`")
             tg_capture_timer = nil 
         end
+    end
+
+    -- SOATNI KUNLIK HISOBOTGA YOZISH (YANGILIK)
+    if clean:find("Bugungi boshqaruv vaqti:%s*(%d+)%s*daqiqa") then
+        local daqiqa = clean:match("Bugungi boshqaruv vaqti:%s*(%d+)%s*daqiqa")
+        local soat = math.floor(tonumber(daqiqa) / 60)
+        local today_str = days_map[os.date("%A")] or "Dushanba"
+        
+        cfg.stats[today_str .. "_soat"] = soat
+        ini.save(cfg, "settings\\config.txt")
+        
+        sendTG("📊 Bugungi boshqaruv vaqti: " .. daqiqa .. " daqiqa. Hozircha: `" .. soat .. "` soat yozildi.")
     end
 
     if clean:find("Shikoyat") and clean:find("ID:%s*(%d+)") then
@@ -641,7 +674,7 @@ function onLoad()
             end
         end)
         
-        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v2.4 - Kengaytirilgan)") 
+        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v2.5 - Haftalik soat)") 
     else 
         print("[XATO] Botingiz nomi " .. bot_name .. " emas! Ismni o'zgartiring.") 
     end
