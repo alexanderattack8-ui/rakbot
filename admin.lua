@@ -8,13 +8,13 @@ local math = require("math")
 local os = require("os")
 
 -- ================= GITHUB YANGILANISH SOZLAMALARI =================
-local script_version = 2.5 
+local script_version = 2.6 
 local script_name_file = "admin.lua" 
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 local script_download_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/admin.lua"
 -- ==================================================================
 
--- CONFIG.TXT DAN MA'LUMOTLARNI YUKLASH (SOATLAR QO'SHILDI)
+-- CONFIG.TXT DAN MA'LUMOTLARNI YUKLASH
 local cfg = ini.load({
     settings = { 
         bot_name = "", 
@@ -301,7 +301,7 @@ function telegramPolling()
                                 tg_capture_timer = os.clock() + 3.0 
                                 
                             elseif txt:lower() == "!cmd" then 
-                                sendTG("🤖 **MENYU (v2.5)**\n📊 `/stats` - Haftalik hisobot\n🔄 `!reset` - Hisobotni 0 qilish\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Joylashuv\n💬 `!a [matn]` - Admin chat\n🛌 `!pause [daq]` - Uxlash")
+                                sendTG("🤖 **MENYU (v2.6)**\n📊 `/stats` - Haftalik hisobot\n🔄 `!reset` - Hisobotni 0 qilish\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Joylashuv\n💬 `!a [matn]` - Admin chat\n🛌 `!pause [daq]` - Uxlash")
                                 
                             elseif txt:lower() == "!admins" then
                                 checking_admins = true
@@ -398,7 +398,6 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- SOATNI KUNLIK HISOBOTGA YOZISH (YANGILIK)
     if clean:find("Bugungi boshqaruv vaqti:%s*(%d+)%s*daqiqa") then
         local daqiqa = clean:match("Bugungi boshqaruv vaqti:%s*(%d+)%s*daqiqa")
         local soat = math.floor(tonumber(daqiqa) / 60)
@@ -484,6 +483,13 @@ function sampev.onServerMessage(color, text)
                 end
             else
                 newTask(function()
+                    -- MP VAQTIDAGI MAXSUS JAVOB
+                    if is_mp_active then
+                        wait(math.random(4000, 7000))
+                        table.insert(report_queue, {id = rep_id, reply = "Assalomu aleykum, iltimos kuting.", name = rep_name, text = rep_text})
+                        return
+                    end
+                    
                     -- ================= DINAMIK KUTISH (6 - 15 SONIYA) =================
                     local text_len = string.len(rep_text)
                     local calc_delay = 6000 + (text_len * 150)
@@ -674,7 +680,7 @@ function onLoad()
             end
         end)
         
-        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v2.5 - Haftalik soat)") 
+        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v2.6)") 
     else 
         print("[XATO] Botingiz nomi " .. bot_name .. " emas! Ismni o'zgartiring.") 
     end
