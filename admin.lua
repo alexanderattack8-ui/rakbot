@@ -8,10 +8,9 @@ local math = require("math")
 local os = require("os")
 
 -- ================= GITHUB YANGILANISH SOZLAMALARI =================
-local script_version = 2.6 
+local script_version = 3.4 
 local script_name_file = "admin.lua" 
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
-local script_download_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/admin.lua"
 -- ==================================================================
 
 -- CONFIG.TXT DAN MA'LUMOTLARNI YUKLASH
@@ -20,26 +19,18 @@ local cfg = ini.load({
         bot_name = "", 
         token = "", 
         chatid = "", 
-        password = "", 
-        openai_key = "" 
+        password = "",
+        gemini_key = ""
     },
-    stats = {
-        Dushanba = 0, Dushanba_soat = 0,
-        Seshanba = 0, Seshanba_soat = 0,
-        Chorshanba = 0, Chorshanba_soat = 0,
-        Payshanba = 0, Payshanba_soat = 0,
-        Juma = 0, Juma_soat = 0,
-        Shanba = 0, Shanba_soat = 0,
-        Yakshanba = 0, Yakshanba_soat = 0,
+    daily_logs = {
         start_time = os.time()
     }
 }, "settings\\config.txt")
 
--- O'ZGARUVCHILARNI CONFIGDAN AJRATIB OLISH
 local bot_name = tostring(cfg.settings.bot_name):match("^%s*(.-)%s*$") or ""
 local bot_token = tostring(cfg.settings.token):match("^%s*(.-)%s*$") or ""
 local bot_chatid = tostring(cfg.settings.chatid):match("^%s*(.-)%s*$") or ""
-local openai_key = tostring(cfg.settings.openai_key):match("^%s*(.-)%s*$") or ""
+local gemini_key = tostring(cfg.settings.gemini_key):match("^%s*(.-)%s*$") or ""
 
 -- XOTIRA VA LUG'ATLAR
 local memory_file = "settings\\" .. bot_name:lower() .. "_memory.json"
@@ -47,6 +38,7 @@ local bot_memory = {}
 local pending_reports = {} 
 local report_queue = {} 
 local sp_queue = {} 
+
 local is_spectating = false
 local sp_timer = 0
 local tg_capture_timer = nil 
@@ -55,14 +47,18 @@ local ai_busy = false
 local is_logged_in = false 
 
 local days_map = {
-    Monday = "Dushanba", Tuesday = "Seshanba", Wednesday = "Chorshanba",
-    Thursday = "Payshanba", Friday = "Juma", Saturday = "Shanba", Sunday = "Yakshanba"
+    Monday = "Dushanba", 
+    Tuesday = "Seshanba", 
+    Wednesday = "Chorshanba",
+    Thursday = "Payshanba", 
+    Friday = "Juma", 
+    Saturday = "Shanba", 
+    Sunday = "Yakshanba"
 }
 
 local active_chat_admin = nil
 local active_chat_time = 0
 local chat_timeout_seconds = 60 
-
 local last_dialog_id = -1
 local last_dialog_time = 0
 
@@ -71,7 +67,9 @@ function loadMemory()
     if f then
         local data = f:read("*a")
         f:close()
-        pcall(function() bot_memory = json.decode(data) end)
+        pcall(function() 
+            bot_memory = json.decode(data) 
+        end)
     end
 end
 
@@ -83,14 +81,17 @@ function saveMemory()
     end
 end
 
-local red_admins = { ["Maga_By"] = true, ["Ivan_Vasilyev"] = true, ["John_Medvedev"] = true, ["Ace_Alonso"] = true }
+local red_admins = { 
+    ["Maga_By"] = true, 
+    ["Ivan_Vasilyev"] = true, 
+    ["John_Medvedev"] = true, 
+    ["Ace_Alonso"] = true 
+}
 
--- KALIT SO'ZLAR (LUG'AT)
 local auto_replies = {
-    ["qachon warn"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
-    ["warn qachon"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
-    ["qancha warn"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
-    ["yordam"] = "Assalomu aleykum, kuzatyapman.",
+    ["qachon warn"] = "Assalomu alaykum, statstika orqali bilib olishingiz mumkin.",
+    ["warn qachon"] = "Assalomu alaykum, statstika orqali bilib olishingiz mumkin.",
+    ["qancha warn"] = "Assalomu alaykum, statstika orqali bilib olishingiz mumkin.",
     ["tuzatib bering"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
     ["remont"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
     ["buzildi"] = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing.",
@@ -103,8 +104,10 @@ local auto_replies = {
     ["yeching"] = "Assalomu aleykum, administrator bunday jarayonlarga aralashmaydi.",
     ["sababsiz"] = "Assalomu aleykum, dalil bilan shikoyat yozing.",
     ["pul bering"] = "Assalomu aleykum, keyingi off-top uchun jazo qo'llaniladi.",
-    ["qayerda"] = "Assalomu alaykum, planshet (/gps) orqali qidirib topishingiz mumkin.",
-    ["topib ber"] = "Assalomu alaykum, planshet (/gps) orqali qidirib topishingiz mumkin."
+    ["qayerda"] = "Assalomu alaykum, planshet orqali qidirib topishingiz mumkin.",
+    ["topib ber"] = "Assalomu alaykum, planshet  orqali qidirib topishingiz mumkin.",
+    ["qanday boraman"] = "Assalomu alaykum, planshet orqali qidirib topishingiz mumkin.",
+    ["qanday ishlayman"] = "Assalomu alaykum, bu RP jarayon, o'zingiz bilib olishingiz kerak."
 }
 
 local is_wandering = false
@@ -130,75 +133,56 @@ function isRPNick(name)
     return string.match(name, "^%u%a+_%u%a+$") ~= nil 
 end
 
-function sendTG(text)
-    if bot_token == "" or bot_chatid == "" then 
-        return 
-    end
-    local payload = { 
-        chat_id = bot_chatid, 
-        text = text, 
-        parse_mode = "Markdown" 
-    }
-    local headers = {
-        ["Content-Type"] = "application/json"
-    }
-    newTask(function() 
-        pcall(function() 
-            requests.post("https://api.telegram.org/bot" .. bot_token .. "/sendMessage", {headers = headers, data = json.encode(payload), timeout = 2}) 
-        end) 
-    end)
-end
-
-function checkUpdates()
-    print("[UPDATE] Yangilanishlar tekshirilmoqda...")
-    newTask(function()
-        local success, response = pcall(function() 
-            return requests.get(update_info_url, {timeout = 3}) 
-        end)
-        
-        if success and response and response.status_code == 200 then
-            local data = json.decode(response.text)
-            if data and data.version and tonumber(data.version) > script_version then
-                sendTG("🔄 **Yangi versiya chiqdi! (v" .. data.version .. ")**\nIltimos, yangi kodni GitHub'dan qo'lda yangilang (qotib qolmasligi uchun avtomatik o'chirildi).")
-            end
-        end
-    end)
-end
-
-function askChatGPT(system_prompt, user_text)
-    if openai_key == "" or ai_busy then 
+function askGemini(system_prompt, user_text)
+    if gemini_key == "" or ai_busy then 
         return nil 
     end
-    ai_busy = true
     
+    ai_busy = true
     local safe_user_text = user_text:gsub('"', ''):gsub('\\', '')
-    local payload = { 
-        model = "gpt-3.5-turbo", 
-        messages = { 
-            {role = "system", content = system_prompt}, 
-            {role = "user", content = safe_user_text} 
-        }, 
-        max_tokens = 60, 
-        temperature = 0.1 
+    
+    local payload = {
+        contents = { 
+            { 
+                parts = { 
+                    { text = system_prompt .. "\n\nO'yinchi/Admin yozdi: " .. safe_user_text } 
+                } 
+            } 
+        },
+        generationConfig = { 
+            temperature = 0.6, 
+            maxOutputTokens = 80 
+        }
     }
+    
     local headers = { 
-        ["Content-Type"] = "application/json", 
-        ["Authorization"] = "Bearer " .. openai_key 
+        ["Content-Type"] = "application/json" 
     }
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
     
     local success, response = pcall(function() 
-        return requests.post("https://api.openai.com/v1/chat/completions", {headers = headers, data = json.encode(payload), timeout = 3.0}) 
+        return requests.post(url, {headers = headers, data = json.encode(payload), timeout = 5.0}) 
     end)
     
     ai_busy = false
     
     if success and response and response.status_code == 200 then
         local data = json.decode(response.text)
-        if data and data.choices and data.choices[1] and data.choices[1].message then
-            return data.choices[1].message.content:gsub("\n", " ")
+        if data and data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts and data.candidates[1].content.parts[1] then
+            return data.candidates[1].content.parts[1].text:gsub("\n", " ")
         end
     end
     
+    return nil
+end
+
+function getAIChatReply(text)
+    local prompt = string.format("Siz SA-MP serverining administratori %s siz. Kimdir sizga yozdi. Qisqa, tabiiy va do'stona ohangda o'zbek tilida (1 ta gap bilan) javob bering.", bot_name)
+    local ai_response = askGemini(prompt, text)
+    
+    if ai_response then 
+        return ai_response 
+    end
     return nil
 end
 
@@ -206,8 +190,12 @@ function getSmartReply(text, sender_name)
     local lower_text = text:lower()
     
     if lower_text:find("rp") and (lower_text:find("nik") or lower_text:find("nick")) then
-        local target_name = text:match("(%u%a+_%u%a+)") or sender_name
-        if target_name then
+        local target_name = text:match("(%u%a+_%u%a+)")
+        if not target_name then 
+            target_name = sender_name 
+        end
+        
+        if target_name and target_name ~= "Noma'lum" then
             if isRPNick(target_name) then 
                 return "Assalomu alaykum, ha, bu RP nik."
             else 
@@ -231,19 +219,44 @@ function getSmartReply(text, sender_name)
     return nil 
 end
 
-function getAIChatReply(text)
-    local ai_response = askChatGPT("Siz SA-MP o'yinida " .. bot_name .. " ismli hurmatli adminsiz. Tabiiy ohangda o'zbek tilida qisqa, bitta gap bilan javob qaytaring.", text)
-    if ai_response then 
-        return ai_response 
+function sendTG(text)
+    if bot_token == "" or bot_chatid == "" then 
+        return 
     end
     
-    return "Xo'sh, eshitaman."
+    local payload = { 
+        chat_id = bot_chatid, 
+        text = text, 
+        parse_mode = "Markdown" 
+    }
+    local headers = { 
+        ["Content-Type"] = "application/json" 
+    }
+    
+    newTask(function() 
+        pcall(function() 
+            requests.post("https://api.telegram.org/bot" .. bot_token .. "/sendMessage", {headers = headers, data = json.encode(payload), timeout = 2}) 
+        end) 
+    end)
 end
 
--- ================= TASODIFIY KUZATUV (RANDOM SP) =================
+function checkUpdates()
+    newTask(function()
+        local success, response = pcall(function() 
+            return requests.get(update_info_url, {timeout = 3}) 
+        end)
+        
+        if success and response and response.status_code == 200 then
+            local data = json.decode(response.text)
+            if data and data.version and tonumber(data.version) > script_version then
+                sendTG("🔄 **Yangi versiya chiqdi! (v" .. data.version .. ")**\nIltimos, yangi kodni GitHub'dan qo'lda yangilang.")
+            end
+        end
+    end)
+end
+
 function spectateRandomPlayer()
     local players = {}
-    
     for i = 0, 1000 do
         if i ~= getBotId() then
             local success, name = pcall(getPlayerName, i)
@@ -275,7 +288,6 @@ function spectateRandomPlayer()
     end
 end
 
--- ================= TELEGRAM XABARLAR (STATS VA RESET) =================
 function telegramPolling()
     local update_id = 0
     newTask(function()
@@ -287,7 +299,6 @@ function telegramPolling()
             
             if success and res and res.status_code == 200 then
                 local decoded = json.decode(res.text)
-                
                 if decoded.ok and #decoded.result > 0 then
                     for _, update in ipairs(decoded.result) do
                         update_id = update.update_id
@@ -301,7 +312,7 @@ function telegramPolling()
                                 tg_capture_timer = os.clock() + 3.0 
                                 
                             elseif txt:lower() == "!cmd" then 
-                                sendTG("🤖 **MENYU (v2.6)**\n📊 `/stats` - Haftalik hisobot\n🔄 `!reset` - Hisobotni 0 qilish\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Joylashuv\n💬 `!a [matn]` - Admin chat\n🛌 `!pause [daq]` - Uxlash")
+                                sendTG("🤖 **MENYU (v3.4)**\n📊 `/stats` - Hisobot\n🔄 `!reset` - Hisobotni tozalash\n👥 `!admins` - Onlayn adminlar\n📍 `!loc` - Joylashuv\n💬 `!a [matn]` - Admin chat\n🛌 `!pause [daq]` - Uxlash")
                                 
                             elseif txt:lower() == "!admins" then
                                 checking_admins = true
@@ -313,28 +324,32 @@ function telegramPolling()
                                     checking_admins = false
                                     sendTG("✅ Adminlar ro'yxati yangilandi (Jami: " .. #online_admins_table .. ")") 
                                 end)
-                                
-                            elseif txt:lower() == "/stats" or txt:lower() == "!stats" then
-                                local msg = "📊 **HAFTALIK HISOBOT:**\n\n"
-                                local kunlar = {"Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"}
-                                
-                                for _, day in ipairs(kunlar) do
-                                    local rp = cfg.stats[day] or 0
-                                    local soat = cfg.stats[day .. "_soat"] or 0
-                                    msg = msg .. "📅 *" .. day .. ":* Rep `" .. rp .. "` | Soat `" .. soat .. "`\n"
-                                end
-                                
-                                sendTG(msg)
                             
-                            elseif txt:lower() == "!reset" then
-                                local kunlar = {"Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"}
-                                for _, day in ipairs(kunlar) do
-                                    cfg.stats[day] = 0
-                                    cfg.stats[day .. "_soat"] = 0
+                            elseif txt:lower() == "/stats" or txt:lower() == "!stats" then
+                                local msg = "📊 **OXIRGI 7 KUNLIK HISOBOT:**\n\n"
+                                local current_time = os.time()
+                                
+                                for i = 6, 0, -1 do
+                                    local d = current_time - (i * 86400) 
+                                    local d_str = os.date("%d.%m", d)
+                                    local d_name = days_map[os.date("%A", d)]
+                                    
+                                    local rp = cfg.daily_logs[d_str .. "_rep"] or 0
+                                    local soat = cfg.daily_logs[d_str .. "_soat"] or 0
+                                    
+                                    if i == 0 then
+                                        msg = msg .. "🟢 *" .. d_str .. " (" .. d_name .. ") [Bugun]:* Rep `" .. rp .. "` | Soat `" .. soat .. "`\n"
+                                    else
+                                        msg = msg .. "📅 *" .. d_str .. " (" .. d_name .. "):* Rep `" .. rp .. "` | Soat `" .. soat .. "`\n"
+                                    end
                                 end
-                                cfg.stats.start_time = os.time()
+                                sendTG(msg)
+                                
+                            elseif txt:lower() == "!reset" then
+                                cfg.daily_logs = {}
+                                cfg.daily_logs.start_time = os.time()
                                 ini.save(cfg, "settings\\config.txt")
-                                sendTG("✅ **Barcha haftalik hisobotlar 0 dan boshlandi!**")
+                                sendTG("✅ **Barcha tarixiy hisobotlar tozalandi! 0 dan boshlandi.**")
                                 
                             elseif txt:match("^!pause%s+(%d+)") then
                                 local mins = tonumber(txt:match("^!pause%s+(%d+)"))
@@ -342,6 +357,7 @@ function telegramPolling()
                                 disconnect()
                                 is_wandering = false
                                 sendTG("🛌 Bot " .. mins .. " daqiqaga uxlaydi.")
+                                
                                 newTask(function() 
                                     while os.time() < sleep_end_time do 
                                         wait(1000) 
@@ -398,14 +414,21 @@ function sampev.onServerMessage(color, text)
         end
     end
 
+    if lower_clean:find("hozir mp bo'ladi") or lower_clean:find("hozir mp boladi") or lower_clean:find("mp boshlan") or lower_clean:find("ishtirok etish uchun") or lower_clean:find("tadbiri boshlan") then
+        is_mp_active = true
+        sendTG("📢 **MP Boshlandi!** O'yinchilar avtomatik teleport bo'lmoqda.")
+    elseif lower_clean:find("g'olib bo'ldi") or lower_clean:find("g'olib bolgan") or lower_clean:find("golib bolgan") or lower_clean:find("tadbiri tugadi") then
+        is_mp_active = false
+        sendTG("🛑 **MP Tugadi!** Teleport yopildi.")
+    end
+
     if clean:find("Bugungi boshqaruv vaqti:%s*(%d+)%s*daqiqa") then
         local daqiqa = clean:match("Bugungi boshqaruv vaqti:%s*(%d+)%s*daqiqa")
         local soat = math.floor(tonumber(daqiqa) / 60)
-        local today_str = days_map[os.date("%A")] or "Dushanba"
+        local today = os.date("%d.%m") 
         
-        cfg.stats[today_str .. "_soat"] = soat
+        cfg.daily_logs[today .. "_soat"] = soat
         ini.save(cfg, "settings\\config.txt")
-        
         sendTG("📊 Bugungi boshqaruv vaqti: " .. daqiqa .. " daqiqa. Hozircha: `" .. soat .. "` soat yozildi.")
     end
 
@@ -422,19 +445,93 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- ================= BOSHQA ADMINLARDAN O'RGANISH (MACHINE LEARNING) =================
+    local a_name, a_cmd, a_args = clean:match("<ADM>%s*%(%d+%)%s*(%a+_%a+)%[%d+%]:%s*(/[%a]+)%s+(.+)")
+    if not a_name then 
+        a_name, a_cmd, a_args = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(/[%a]+)%s+(.+)") 
+    end
+    
+    if a_name and a_cmd and allowed_cmds[a_cmd:lower()] then
+        local first_letter, last_name = a_name:match("^(%a)%a+_(%a+)$")
+        if first_letter and last_name then
+            last_punish_admin = first_letter .. "." .. last_name
+            last_punish_status = true
+            
+            newTask(function()
+                wait(1500)
+                sendInput(a_cmd .. " " .. a_args .. " // " .. last_punish_admin)
+                wait(1500) 
+                
+                if last_punish_status then 
+                    sendInput("/a +")
+                    sendTG("🔨 Jazo berildi:\n`" .. a_cmd .. " " .. a_args .. "`")
+                    last_punish_admin = nil 
+                end
+            end)
+        end
+    end
+
+    local adm_name, adm_text = clean:match("<ADM>%s*%(%d+%)%s*(%a+_%a+)%[%d+%]:%s*(.+)")
+    if not adm_name then 
+        adm_name, adm_text = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(.+)") 
+    end
+
+    if adm_name and adm_name ~= bot_name and not red_admins[adm_name] then
+        if adm_text and not allowed_cmds[adm_text:match("^(%S+)")] then 
+            local lower_adm_text = adm_text:lower()
+            local is_talking_to_me = false
+            
+            local bot_short_name = bot_name:match("^(%w+)_"):lower()
+            if lower_adm_text:find(bot_short_name) or lower_adm_text:find("azim") or lower_adm_text:find("asilbek") or lower_adm_text:find("bot") then 
+                is_talking_to_me = true
+            elseif active_chat_admin == adm_name and (os.time() - active_chat_time) <= chat_timeout_seconds then 
+                is_talking_to_me = true 
+            end
+
+            if is_talking_to_me then
+                active_chat_admin = adm_name
+                active_chat_time = os.time()
+                sendTG("💬 *Admin (" .. adm_name .. ") botga yozyapti:*\n_" .. adm_text .. "_") 
+                
+                newTask(function()
+                    wait(math.random(1500, 2500)) 
+                    local ai_reply = getAIChatReply("Admin chatida " .. adm_name .. " ismli hamkasbingiz sizga yozdi: " .. adm_text)
+                    if ai_reply then
+                        sendInput("/a " .. ai_reply)
+                        sendTG("🤖 *Gemini AI Javobi:*\n_" .. ai_reply .. "_")
+                    end
+                end)
+            end
+        end
+    end
+
+    if clean:match("^SMS") or clean:match("yozdi:") then 
+        local sender_name, sender_id = clean:match("(%a+_%a+)%[(%d+)%]")
+        if sender_name and sender_id and isRPNick(sender_name) and not red_admins[sender_name] and sender_name ~= bot_name then
+            sendTG("✉️ *Sizga SMS (" .. sender_name .. "):*\n_" .. clean .. "_") 
+            
+            newTask(function()
+                local user_msg = clean:gsub(sender_name .. "%[%d+%]", ""):gsub("SMS:", ""):gsub("yozdi:", "")
+                wait(math.random(2000, 4000)) 
+                local ai_reply = getAIChatReply("Sizga o'yinchi shunday SMS yozdi: " .. user_msg)
+                
+                if ai_reply then 
+                    sendInput("/pm " .. sender_id .. " " .. ai_reply) 
+                end
+            end)
+        end
+    end
+
     local target_id, admin_ans = clean:match("<ADM>.-%[%d+%]%s+.-%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)") 
     if target_id and admin_ans then
         target_id = tostring(target_id)
         if pending_reports[target_id] then
             bot_memory[pending_reports[target_id]:lower()] = admin_ans
             saveMemory()
-            sendTG("🧠 **O'rgandim!**\nSavol: `" .. pending_reports[target_id] .. "`\nAdmin Javobi: `" .. admin_ans .. "`")
+            sendTG("🧠 **Bazaga qo'shildi!**\nSavol: `" .. pending_reports[target_id] .. "`\nJavob: `" .. admin_ans .. "`")
             pending_reports[target_id] = nil 
         end
     end
 
-    -- ================= HISOBOTLARNI QABUL QILISH VA DINAMIK JAVOB =================
     if clean:find("%[Hisobotlar soni:") then
         local rep_name = clean:match("([%a_]+)%[%d+%]:")
         local rep_id, rep_text = clean:match("%[(%d+)%]:%s*(.-)%s*%[Hisobotlar")
@@ -449,10 +546,11 @@ function sampev.onServerMessage(color, text)
         if rep_id and rep_text then
             rep_name = rep_name or "Noma'lum"
             rep_id = tostring(rep_id)
-            
             pending_reports[rep_id] = rep_text
             
             local lower_rep = rep_text:lower():match("^%s*(.-)%s*$")
+            
+            -- `+` yozuvini aniqlaymiz (ortiqcha harf bo'lmasligi kerak)
             local is_fast_plus = (lower_rep:match("^[+%s]+$") ~= nil)
 
             if lower_rep:find("ag'dar") or lower_rep:find("to'ntar") then 
@@ -471,26 +569,19 @@ function sampev.onServerMessage(color, text)
                 end) 
             end
             
+            -- ================= `+` BELGISIGA UMUMAN JAVOB BERMASLIK =================
             if is_fast_plus then
-                if is_mp_active then
-                    local final_reply = "Assalomu alaykum, hozir teleport bo'lasiz"
-                    table.insert(report_queue, 1, {id = rep_id, reply = final_reply, name = rep_name, text = rep_text})
-                else
-                    newTask(function() 
-                        wait(6000)
-                        table.insert(report_queue, {id = rep_id, reply = "Assalomu alaykum, teleport yopiq", name = rep_name, text = rep_text}) 
-                    end)
-                end
+                -- Hech qanday javob yozmaymiz. O'yinchining + yuborgani haqida xabar qoldiramiz.
+                sendTG("ℹ️ O'yinchi " .. rep_name .. " [" .. rep_id .. "] `+` yubordi (E'tiborsiz qoldirildi).")
             else
                 newTask(function()
-                    -- MP VAQTIDAGI MAXSUS JAVOB
                     if is_mp_active then
+                        -- MP vaqtida oddiy savollarga "iltimos kuting" yoziladi
                         wait(math.random(4000, 7000))
                         table.insert(report_queue, {id = rep_id, reply = "Assalomu aleykum, iltimos kuting.", name = rep_name, text = rep_text})
                         return
                     end
                     
-                    -- ================= DINAMIK KUTISH (6 - 15 SONIYA) =================
                     local text_len = string.len(rep_text)
                     local calc_delay = 6000 + (text_len * 150)
                     
@@ -507,29 +598,15 @@ function sampev.onServerMessage(color, text)
                     local final_reply = getSmartReply(rep_text, rep_name)
                     
                     if not final_reply then
-                        local admin_system_prompt = string.format([[
-Siz SA-MP serverining bot-administratorisiz. Ismingiz "%s". 
-Sizning vazifangiz o'yinchining savolini o'qib, unga FAQAT quyidagi qoidalarga mos keluvchi 1 ta aniq javobni yuborish. Hech qanday izoh qo'shmang!
-
-1-QOIDA (Joylashuv: qayerda, topib ber, qanday boraman): "Assalomu alaykum, qidirayotgan joyingizni planshet (/gps) orqali topishingiz mumkin."
-2-QOIDA (Mashina: tuzat, chin, buzildi, remont, evakuator): "Assalomu alaykum, spidometrdagi evakuator tugmasini bosing."
-3-QOIDA (Shikoyat: DM, DB, id, uryapti, so'kyapti, qamang, jazo bering): "Assalomu alaykum, ushbu o'yinchini kuzatishni boshladim."
-4-QOIDA (O'yin jarayoni: pul ber, mashina narxi, qanday ishlayman): "Assalomu alaykum, bu RP jarayon, o'zingiz bilib olishingiz kerak."
-5-QOIDA (Boshqa barcha savollar uchun): "Assalomu Alaykum, sizni kuzatmoqdaman."
-]], bot_name)
-                        final_reply = askChatGPT(admin_system_prompt, rep_text)
-                        
-                        if not final_reply or final_reply == "" then
-                            if rep_text:lower():find("qayer") or rep_text:lower():find("topib") then 
-                                final_reply = "Assalomu alaykum, planshet (/gps) orqali qidirib topishingiz mumkin."
-                            elseif rep_text:lower():find("chin") or rep_text:lower():find("moshin") then
-                                final_reply = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing."
-                            else 
-                                final_reply = "Assalomu Alaykum, sizni kuzatmoqdaman." 
-                            end
+                        if rep_text:lower():find("qayer") or rep_text:lower():find("topib") or rep_text:lower():find("qanday boraman") then 
+                            final_reply = "Assalomu alaykum, planshet (/gps) orqali qidirib topishingiz mumkin."
+                        elseif rep_text:lower():find("chin") or rep_text:lower():find("moshin") or rep_text:lower():find("tuzat") then 
+                            final_reply = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing."
+                        else 
+                            final_reply = "Assalomu Alaykum, sizni kuzatmoqdaman." 
                         end
                         
-                        if final_reply:find("kuzatishni boshladim") then
+                        if final_reply:find("kuzat") then
                             local extract_id = rep_text:match("(%d+)")
                             if extract_id then 
                                 table.insert(sp_queue, extract_id) 
@@ -552,7 +629,6 @@ Sizning vazifangiz o'yinchining savolini o'qib, unga FAQAT quyidagi qoidalarga m
     end
 end
 
--- ================= DIALOG VA SPAVN BOSHQARUVI =================
 function sampev.onShowDialog(id, style, title, button1, button2, text)
     local clean_title = title:gsub("{......}", "")
     local clean_text = text:gsub("{......}", "")
@@ -570,11 +646,7 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
     end
 
     if lower_title:find("avtorizatsiya") or lower_title:find("пароль") then 
-        if cfg.settings.password == "" then 
-            print("[XATO] config.txt da parol yo'q!") 
-        end
         sendDialogResponse(id, 1, 0, cfg.settings.password)
-        
         if not is_logged_in then
             is_logged_in = true
             newTask(function()
@@ -617,17 +689,18 @@ end
 
 function onConnectionClosed()
     is_wandering = false
-    is_logged_in = false 
+    is_logged_in = false
     sendTG("❌ Bot serverdan uzildi.")
+    
     newTask(function() 
         wait(15000)
         connect()
-        sendTG("🟢 Qayta ulanmoqda...")
+        sendTG("🟢 Qayta ulanmoqda...") 
     end)
 end
 
-function onExit()
-    ini.save(cfg, "settings\\config.txt")
+function onExit() 
+    ini.save(cfg, "settings\\config.txt") 
 end
 
 function onLoad()
@@ -640,27 +713,23 @@ function onLoad()
             while true do
                 wait(1000) 
                 
-                -- ================= MUKAMMAL KUZATUV TIZIMI =================
                 if is_spectating then
-                    -- 30 soniyadan so'ng SP dan chiqish
-                    if os.time() - sp_timer >= 30 then
-                        sendInput("/sp") 
+                    if os.time() - sp_timer >= 30 then 
+                        sendInput("/sp")
                         is_spectating = false
-                        sp_timer = os.time() -- Bo'sh turgan vaqtni boshlash
+                        sp_timer = os.time() 
                     end
                 elseif #sp_queue > 0 then
-                    -- 1. Navbatdagi (Shikoyat) SP
                     local target_id = table.remove(sp_queue, 1) 
                     sendInput("/sp " .. target_id)
                     is_spectating = true
                     sp_timer = os.time()
                     sendTG("👁 Maxsus SP: " .. target_id .. " ID kuzatilmoqda.")
                 else
-                    -- 2. Avtomatik (Random) SP - Agar bot 5 soniya bekor qolsa
-                    if os.time() - sp_timer >= 5 then
+                    if os.time() - sp_timer >= 5 then 
                         spectateRandomPlayer()
                         is_spectating = true
-                        sp_timer = os.time()
+                        sp_timer = os.time() 
                     end
                 end
 
@@ -668,8 +737,8 @@ function onLoad()
                     local task = table.remove(report_queue, 1)
                     sendInput("/ans " .. task.id .. " " .. task.reply)
                     
-                    local today_str = days_map[os.date("%A")] or "Dushanba"
-                    cfg.stats[today_str] = (tonumber(cfg.stats[today_str]) or 0) + 1
+                    local today = os.date("%d.%m") 
+                    cfg.daily_logs[today .. "_rep"] = (tonumber(cfg.daily_logs[today .. "_rep"]) or 0) + 1
                     ini.save(cfg, "settings\\config.txt")
                     
                     wait(500)
@@ -680,7 +749,7 @@ function onLoad()
             end
         end)
         
-        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v2.6)") 
+        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v3.4 - Kengaytirilgan)") 
     else 
         print("[XATO] Botingiz nomi " .. bot_name .. " emas! Ismni o'zgartiring.") 
     end
