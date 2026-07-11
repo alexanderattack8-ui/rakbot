@@ -8,7 +8,7 @@ local math = require("math")
 local os = require("os")
 
 -- ================= GITHUB YANGILANISH SOZLAMALARI =================
-local script_version = 3.5 
+local script_version = 3.6 
 local script_name_file = "admin.lua" 
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 -- ==================================================================
@@ -47,8 +47,13 @@ local ai_busy = false
 local is_logged_in = false 
 
 local days_map = {
-    Monday = "Dushanba", Tuesday = "Seshanba", Wednesday = "Chorshanba",
-    Thursday = "Payshanba", Friday = "Juma", Saturday = "Shanba", Sunday = "Yakshanba"
+    Monday = "Dushanba", 
+    Tuesday = "Seshanba", 
+    Wednesday = "Chorshanba",
+    Thursday = "Payshanba", 
+    Friday = "Juma", 
+    Saturday = "Shanba", 
+    Sunday = "Yakshanba"
 }
 
 local active_chat_admin = nil
@@ -62,7 +67,9 @@ function loadMemory()
     if f then
         local data = f:read("*a")
         f:close()
-        pcall(function() bot_memory = json.decode(data) end)
+        pcall(function() 
+            bot_memory = json.decode(data) 
+        end)
     end
 end
 
@@ -74,9 +81,13 @@ function saveMemory()
     end
 end
 
-local red_admins = { ["Maga_By"] = true, ["Ivan_Vasilyev"] = true, ["John_Medvedev"] = true, ["Ace_Alonso"] = true }
+local red_admins = { 
+    ["Maga_By"] = true, 
+    ["Ivan_Vasilyev"] = true, 
+    ["John_Medvedev"] = true, 
+    ["Ace_Alonso"] = true 
+}
 
--- ASOSIY BAZA (Tezkor javoblar)
 local auto_replies = {
     ["qachon warn"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
     ["warn qachon"] = "Assalomu alaykum, /getinfo buyrug'i orqali o'z profilingizdan bilib olishingiz mumkin.",
@@ -105,8 +116,6 @@ local center_x, center_y = 0, 0
 local current_speed = 0.05 
 local is_hiding = false 
 local sleep_end_time = 0
-local last_punish_admin = nil
-local last_punish_status = true
 local checking_admins = false
 local online_admins_table = {}
 local current_stat_id = nil
@@ -121,7 +130,6 @@ function isRPNick(name)
     return string.match(name, "^%u%a+_%u%a+$") ~= nil 
 end
 
--- ================= GEMINI AI SO'ROV FUNKSIYASI =================
 function askGemini(system_prompt, user_text)
     if gemini_key == "" or ai_busy then 
         return nil 
@@ -164,7 +172,6 @@ end
 function getSmartReply(text, sender_name)
     local lower_text = text:lower()
     
-    -- 1. Nik tekshiruvi
     if lower_text:find("rp") and (lower_text:find("nik") or lower_text:find("nick")) then
         local target_name = text:match("(%u%a+_%u%a+)")
         if not target_name then target_name = sender_name end
@@ -174,12 +181,10 @@ function getSmartReply(text, sender_name)
         end
     end
     
-    -- 2. Koddagi Bazadan Qidiruv
     for key, reply in pairs(auto_replies) do
         if lower_text:find(key, 1, true) then return reply end
     end
     
-    -- 3. Xotiradan (ML) Qidiruv
     for question, answer in pairs(bot_memory) do
         if lower_text:find(question, 1, true) or question:find(lower_text, 1, true) then return answer end
     end
@@ -191,7 +196,11 @@ function sendTG(text)
     if bot_token == "" or bot_chatid == "" then return end
     local payload = { chat_id = bot_chatid, text = text, parse_mode = "Markdown" }
     local headers = { ["Content-Type"] = "application/json" }
-    newTask(function() pcall(function() requests.post("https://api.telegram.org/bot" .. bot_token .. "/sendMessage", {headers = headers, data = json.encode(payload), timeout = 2}) end) end)
+    newTask(function() 
+        pcall(function() 
+            requests.post("https://api.telegram.org/bot" .. bot_token .. "/sendMessage", {headers = headers, data = json.encode(payload), timeout = 2}) 
+        end) 
+    end)
 end
 
 function checkUpdates()
@@ -241,11 +250,16 @@ function telegramPolling()
                         if update.message and update.message.text and tostring(update.message.chat.id) == bot_chatid then
                             local txt = update.message.text
                             if txt:match("^/[%w_]+") then
-                                sendInput(txt); sendTG("⏳ Buyruq serverga yuborildi:\n`" .. txt .. "`"); tg_capture_timer = os.clock() + 3.0 
+                                sendInput(txt)
+                                sendTG("⏳ Buyruq serverga yuborildi:\n`" .. txt .. "`")
+                                tg_capture_timer = os.clock() + 3.0 
                             elseif txt:lower() == "!cmd" then 
-                                sendTG("🤖 **MENYU (v3.5 Terminator)**\n📊 `/stats` - Hisobot\n🔄 `!reset` - Hisobotni tozalash\n👥 `!admins` - Onlayn adminlar\n💬 `!a [matn]` - Admin chat\n🛌 `!pause [daq]` - Uxlash")
+                                sendTG("🤖 **MENYU (v3.6 Terminator)**\n📊 `/stats` - Hisobot\n🔄 `!reset` - Hisobotni tozalash\n👥 `!admins` - Onlayn adminlar\n💬 `!a [matn]` - Admin chat\n🛌 `!pause [daq]` - Uxlash")
                             elseif txt:lower() == "!admins" then
-                                checking_admins = true; online_admins_table = {}; sendInput("/admins"); sendTG("🔍 Adminlar tekshirilmoqda...")
+                                checking_admins = true
+                                online_admins_table = {}
+                                sendInput("/admins")
+                                sendTG("🔍 Adminlar tekshirilmoqda...")
                                 newTask(function() wait(2500); checking_admins = false; sendTG("✅ Adminlar ro'yxati yangilandi (Jami: " .. #online_admins_table .. ")") end)
                             elseif txt:lower() == "/stats" or txt:lower() == "!stats" then
                                 local msg = "📊 **OXIRGI 7 KUNLIK HISOBOT:**\n\n"
@@ -298,7 +312,8 @@ function sampev.onServerMessage(color, text)
 
     if tg_capture_timer and os.clock() <= tg_capture_timer then
         if not clean:match("%[%d+%]:") and not clean:match("SMS:") and not clean:match("yozdi:") then
-            sendTG("📩 **Server:**\n`" .. clean .. "`"); tg_capture_timer = nil 
+            sendTG("📩 **Server:**\n`" .. clean .. "`")
+            tg_capture_timer = nil 
         end
     end
 
@@ -328,16 +343,27 @@ function sampev.onServerMessage(color, text)
         if admin_name then table.insert(online_admins_table, {name = admin_name, id = admin_id, lvl = admin_lvl}) end
     end
 
+    -- ================= XOTIRA TO'QNASHUVI FIX QILINGAN QISM =================
     local a_name, a_cmd, a_args = clean:match("<ADM>%s*%(%d+%)%s*(%a+_%a+)%[%d+%]:%s*(/[%a]+)%s+(.+)")
-    if not a_name then a_name, a_cmd, a_args = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(/[%a]+)%s+(.+)") end
+    if not a_name then 
+        a_name, a_cmd, a_args = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(/[%a]+)%s+(.+)") 
+    end
     
     if a_name and a_cmd and allowed_cmds[a_cmd:lower()] then
         local first_letter, last_name = a_name:match("^(%a)%a+_(%a+)$")
         if first_letter and last_name then
-            last_punish_admin = first_letter .. "." .. last_name; last_punish_status = true
+            
+            -- Xavfsiz, mustaqil o'zgaruvchilar (Local variables)
+            local current_punish_admin = first_letter .. "." .. last_name
+            local current_cmd = a_cmd
+            local current_args = a_args
+            
             newTask(function()
-                wait(1500); sendInput(a_cmd .. " " .. a_args .. " // " .. last_punish_admin); wait(1500) 
-                if last_punish_status then sendInput("/a +"); sendTG("🔨 Jazo berildi:\n`" .. a_cmd .. " " .. a_args .. "`"); last_punish_admin = nil end
+                wait(1500)
+                sendInput(current_cmd .. " " .. current_args .. " // " .. current_punish_admin)
+                wait(1500) 
+                sendInput("/a +")
+                sendTG("🔨 Jazo berildi:\n`" .. current_cmd .. " " .. current_args .. "`")
             end)
         end
     end
@@ -395,7 +421,7 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- ================= REPORTLAR BOSHQAARUVI (GEMINI AI BILAN) =================
+    -- ================= REPORTLAR BOSHQAARUVI =================
     if clean:find("%[Hisobotlar soni:") then
         local rep_name = clean:match("([%a_]+)%[%d+%]:")
         local rep_id, rep_text = clean:match("%[(%d+)%]:%s*(.-)%s*%[Hisobotlar")
@@ -411,12 +437,15 @@ function sampev.onServerMessage(color, text)
             pending_reports[rep_id] = rep_text
             
             local lower_rep = rep_text:lower():match("^%s*(.-)%s*$")
+            
+            -- `+` yozuvini tekshirish (Ichida faqat probel yoki + bo'lsa)
             local is_fast_plus = (lower_rep:match("^[+%s]+$") ~= nil)
 
             if lower_rep:find("ag'dar") or lower_rep:find("to'ntar") then newTask(function() wait(1500); sendInput("/flip " .. rep_id) end) end
             if lower_rep:find("remont") or lower_rep:find("buzildi") or lower_rep:find("fix") then newTask(function() wait(2000); if math.random(1, 100) <= 50 then sendInput("/fixcar " .. rep_id) end end) end
             
             if is_fast_plus then
+                -- Barcha holatlarda `+` ga javob bermaslik (ignoring)
                 sendTG("ℹ️ O'yinchi " .. rep_name .. " [" .. rep_id .. "] `+` yubordi (E'tiborsiz qoldirildi).")
             else
                 newTask(function()
@@ -432,12 +461,10 @@ function sampev.onServerMessage(color, text)
                     if calc_delay > 15000 then calc_delay = math.random(13000, 15000) end
                     calc_delay = calc_delay + math.random(-500, 1000) 
                     
-                    wait(calc_delay) -- O'ylash imitatsiyasi
+                    wait(calc_delay) 
                     
-                    -- 1. Oldin Bazadan va Xotiradan qidirib ko'ramiz
                     local final_reply = getSmartReply(rep_text, rep_name)
                     
-                    -- 2. Agar Bazada yo'q bo'lsa, GEMINI AI'ni ishga solamiz
                     if not final_reply then
                         local gemini_prompt = string.format([[
 Siz SA-MP serverida "%s" ismli administrorsiz.
@@ -449,7 +476,6 @@ Javobingiz doim "Assalomu alaykum" so'zidan boshlansin.
                         
                         final_reply = askGemini(gemini_prompt, rep_text)
                         
-                        -- 3. Agar kutilmaganda internet uzilib AI ishlamay qolsa, eskisidek javob beradi
                         if not final_reply or final_reply == "" then
                             if rep_text:lower():find("qayer") or rep_text:lower():find("topib") or rep_text:lower():find("qanday boraman") then 
                                 final_reply = "Assalomu alaykum, planshet (/gps) orqali qidirib topishingiz mumkin."
@@ -460,7 +486,6 @@ Javobingiz doim "Assalomu alaykum" so'zidan boshlansin.
                             end
                         end
                         
-                        -- SP ga tushirish detektori
                         if final_reply:find("kuzat") then
                             local extract_id = rep_text:match("(%d+)")
                             if extract_id then table.insert(sp_queue, extract_id) end
@@ -552,7 +577,7 @@ function onLoad()
                 end
             end
         end)
-        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v3.5 Terminator - Gemini Full)") 
+        print("[BOT] " .. bot_name .. " 100% Ishga tushdi! (v3.6 Terminator)") 
     else print("[XATO] Botingiz nomi " .. bot_name .. " emas! Ismni o'zgartiring.") end
 end
 -- === KOD TUGASHI ===
