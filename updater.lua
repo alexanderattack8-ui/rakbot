@@ -1,32 +1,24 @@
--- admin.lua uchun avtomatik updater (v2 - TUZATILGAN)
--- FIX: require("os") olib tashlandi - os standart global kutubxona.
+-- rakbot multi-file updater v3
+-- GitHub version.json manifest asosida fayllarni tekshiradi va xavfsiz yangilaydi.
 local requests = require("requests")
 local json = require("cjson")
 
 local BASE_URL = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/"
-local VERSION_URL = BASE_URL .. "version.json"
-local SCRIPT_URL = BASE_URL .. "admin.lua"
-local HASH_URL = BASE_URL .. "admin.lua.sha256"
-
--- FIX: avval bu yerda 4.5 qattiq yozilgan edi va admin.lua ning haqiqiy versiyasi bilan
--- sinxron emasdi (admin.lua 4.7 bo'lsa ham updater 4.5 deb o'ylardi va cheksiz yangilardi).
--- Endi versiya admin.lua dan parametr sifatida keladi.
-local FALLBACK_VERSION = 4.7
-
-local TARGET = "scripts\\admin.lua"
-local BACKUP = "scripts\\admin.lua.backup"
-local MIN_SIZE = 5000 -- to'liq admin.lua shundan kichik bo'lishi mumkin emas
+local MANIFEST_URL = BASE_URL .. "version.json"
+local STATE_FILE = "settings\\update_state.json"
+local CACHE_BUSTER = true
+local MAX_RETRIES = 3
 
 local function log(msg)
     print("[UPDATER] " .. tostring(msg))
 end
 
--- FIX: GitHub raw keshlab qolardi (eski fayl kelardi) + bitta urinishda uzilib qolardi.
--- Endi kesh buzuvchi parametr va 3 marta urinish bor.
 local function get(url)
-    for attempt = 1, 3 do
-        local sep = url:find("?", 1, true) and "&" or "?"
-        local full = url .. sep .. "nocache=" .. tostring(os.time()) .. tostring(attempt)
+    for attempt = 1, MAX_RETRIES do
+        local full = url
+        if CACHE_BUSTER then
+            full = url .. (url:find("?", 1, true) and "&" or "?") .. "nocache=" .. os.time() .. "_" .. attempt
+        end
         local ok, res = pcall(function()
             return requests.get(full, {
                 timeout = 15,
@@ -36,30 +28,7 @@ local function get(url)
         if ok and res and res.status_code == 200 and type(res.text) == "string" and res.text ~= "" then
             return res.text
         end
-        if attempt < 3 and wait then wait(1500) end
-    end
-    return nil
-end
-
--- FIX: avval require("sha256") bo'lmasa ham hash tekshiruvi majburiy edi va
--- yangilanish DOIM "hash tekshiruvidan o'tmadi" bilan bekor bo'lardi.
--- Endi hash bor bo'lsa tekshiriladi, bo'lmasa loadstring bilan sintaksis tekshiriladi.
-local function digest(data)
-    for _, name in ipairs({ "sha256", "sha2", "crypto.sha256" }) do
-        local ok, mod = pcall(require, name)
-        if ok and mod then
-            if type(mod) == "function" then
-                local ok2, out = pcall(mod, data)
-                if ok2 and type(out) == "string" then return out end
-            elseif type(mod) == "table" then
-                for _, fn in ipairs({ "digest", "sha256", "hash", "sum" }) do
-                    if type(mod[fn]) == "function" then
-                        local ok2, out = pcall(mod[fn], data)
-                        if ok2 and type(out) == "string" then return out end
-                    end
-                end
-            end
-        end
+        if attempt < MAX_RETRIES and wait then wait(1000) end
     end
     return nil
 end
@@ -77,100 +46,126 @@ local function writeAll(path, data)
     if not f then return false end
     local ok = pcall(function() f:write(data) end)
     f:close()
-    return ok and true or false
+    return ok
 end
 
-local function versionNumber(text)
-    if type(text) ~= "string" then return nil end
-    local ok, data = pcall(json.decode, text)
-    if ok and type(data) == "table" and tonumber(data.version) then
-        return tonumber(data.version)
+local function digest(data)
+    for _, module_name in ipairs({ "sha256", "sha2", "crypto.sha256" }) do
+        local ok, mod = pcall(require, module_name)
+        if ok and mod then
+            if type(mod) == "function" then
+                local ok2, out = pcall(mod, data)
+                if ok2 and type(out) == "string" then return out:lower() end
+            elseif type(mod) == "table" then
+                for _, fn in ipairs({ "digest", "sha256", "hash", "sum" }) do
+                    if type(mod[fn]) == "function" then
+                        local ok2, out = pcall(mod[fn], data)
+                        if ok2 and type(out) == "string" then return out:lower() end
+                    end
+                end
+            end
+        end
     end
-    -- FIX: version.json buzuq bo'lsa ham raqamni ajratib olishga harakat qiladi
-    return tonumber(tostring(text):match('"version"%s*:%s*"?([%d%.]+)"?'))
+    return nil
 end
 
--- FIX: eng muhim yangi tekshiruv - yuklangan fayl haqiqatan to'liq va yaroqli Lua ekanligi.
--- Yarim yuklangan yoki HTML xato sahifasi kelib qolsa bot butunlay ishlamay qolardi.
-local function validate(body)
-    if type(body) ~= "string" then return false, "fayl bo'sh" end
-    if #body < MIN_SIZE then return false, "fayl juda kichik (" .. #body .. " bayt)" end
-    if body:match("^%s*<") then return false, "Lua emas, HTML sahifa keldi" end
-    if not body:find("function onLoad", 1, true) then return false, "onLoad topilmadi" end
-    if not body:find("sampev.onServerMessage", 1, true) then return false, "onServerMessage topilmadi" end
-    local chunk, err
-    if loadstring then
-        chunk, err = loadstring(body, "admin_update")
-    elseif load then
-        chunk, err = load(body, "admin_update")
+local function parseJSON(text)
+    local ok, data = pcall(json.decode, text or "")
+    if ok and type(data) == "table" then return data end
+    return nil
+end
+
+local function localVersion(state, path)
+    if state and state.files and state.files[path] then
+        return tonumber(state.files[path].version) or 0
     end
-    if chunk == nil and err then
-        return false, "sintaksis xato: " .. tostring(err)
+    return 0
+end
+
+local function saveState(state)
+    pcall(function() writeAll(STATE_FILE, json.encode(state)) end)
+end
+
+local function validFile(body, entry)
+    if type(body) ~= "string" or body == "" then return false, "bo'sh fayl" end
+    if entry.min_size and #body < tonumber(entry.min_size) then
+        return false, "fayl juda kichik"
+    end
+    if entry.type == "lua" then
+        if body:match("^%s*<") then return false, "HTML keldi, Lua emas" end
+        if loadstring then
+            local chunk, err = loadstring(body, entry.path)
+            if not chunk then return false, "Lua sintaksis xatosi: " .. tostring(err) end
+        end
+    elseif entry.type == "json" then
+        if not parseJSON(body) then return false, "JSON yaroqsiz" end
     end
     return true
 end
 
-function checkAndUpdate(current_version)
-    local current = tonumber(current_version) or FALLBACK_VERSION
+local function updateOne(entry, state)
+    local path = assert(entry.path, "manifest path yo'q")
+    local target = assert(entry.target, "manifest target yo'q")
+    local remote_version = tonumber(entry.version) or 0
+    if remote_version <= localVersion(state, path) then return nil end
 
-    local remote = versionNumber(get(VERSION_URL))
-    if not remote then
-        log("version.json o'qilmadi")
-        return nil
-    end
-    if remote <= current then return nil end
+    local body = get(BASE_URL .. path)
+    if not body then return "[UPDATE] " .. path .. ": yuklab bo'lmadi" end
+    local ok, why = validFile(body, entry)
+    if not ok then return "[UPDATE] " .. path .. ": " .. why end
 
-    local body = get(SCRIPT_URL)
-    if not body then
-        return "[UPDATE] Yangi versiya v" .. tostring(remote) .. " topildi, lekin fayl yuklanmadi."
-    end
-
-    local ok_valid, why = validate(body)
-    if not ok_valid then
-        return "[UPDATE] Yuklangan fayl yaroqsiz, almashtirilmadi: " .. tostring(why)
-    end
-
-    -- Hash tekshiruvi: modul va hash fayli bo'lsa qat'iy tekshiriladi, bo'lmasa o'tkazib yuboriladi.
-    local expected = get(HASH_URL)
-    if expected then
-        expected = tostring(expected):match("%x%x%x%x%x%x%x%x+")
-    end
+    local expected = tostring(entry.sha256 or ""):match("%x%x%x%x%x%x%x%x+")
     local actual = digest(body)
-    if expected and actual then
-        if actual:lower() ~= expected:lower() then
-            return "[UPDATE] Hash mos kelmadi, fayl almashtirilmadi."
-        end
-    elseif expected and not actual then
-        log("sha256 moduli yo'q, hash tekshiruvi o'tkazib yuborildi (sintaksis tekshiruvi o'tdi)")
+    if expected and actual and expected:lower() ~= actual:lower() then
+        return "[UPDATE] " .. path .. ": SHA-256 mos kelmadi"
     end
+    if expected and not actual then log(path .. ": sha256 moduli yo'q, sintaksis tekshiruvi ishladi") end
 
-    local old = readAll(TARGET)
-    if not old then
-        return "[UPDATE] Eski admin.lua topilmadi (" .. TARGET .. "), yangilash bekor qilindi."
-    end
-    if old == body then
-        log("fayl allaqachon yangi, faqat version.json oldinda")
+    local old = readAll(target)
+    if old and old == body then
+        state.files[path] = { version = remote_version, updated_at = os.time() }
         return nil
     end
-    if not writeAll(BACKUP, old) then
-        return "[UPDATE] Backup yaratilmadi, yangilash bekor qilindi."
+    if old and entry.backup ~= false then
+        if not writeAll(target .. ".backup", old) then return "[UPDATE] " .. path .. ": backup yaratilmadi" end
+    end
+    if not writeAll(target, body) then
+        if old then writeAll(target, old) end
+        return "[UPDATE] " .. path .. ": yozilmadi"
+    end
+    if readAll(target) ~= body then
+        if old then writeAll(target, old) end
+        return "[UPDATE] " .. path .. ": qayta o'qish tekshiruvi yiqildi"
+    end
+    state.files[path] = { version = remote_version, updated_at = os.time() }
+    return "[UPDATE] " .. path .. ": v" .. remote_version .. " o'rnatildi"
+end
+
+function checkAndUpdate(current_admin_version)
+    local manifest = parseJSON(get(MANIFEST_URL))
+    if not manifest or type(manifest.files) ~= "table" then
+        return "[UPDATE] version.json manifesti o'qilmadi"
     end
 
-    -- FIX: avval os.remove + os.rename ishlatilgan. Windows'da ishlayotgan skript fayli
-    -- band bo'lsa rename yiqilardi va admin.lua butunlay yo'qolib ketishi mumkin edi.
-    -- Endi joyida qayta yozilib, darhol qayta o'qib tekshiriladi.
-    if not writeAll(TARGET, body) then
-        writeAll(TARGET, old)
-        return "[UPDATE] admin.lua yozilmadi, eski fayl saqlanib qoldi."
-    end
-    local check = readAll(TARGET)
-    if check ~= body then
-        writeAll(TARGET, old)
-        return "[UPDATE] Yozilgan fayl tekshiruvdan o'tmadi, backup tiklandi."
-    end
+    local state = parseJSON(readAll(STATE_FILE) or "{}") or {}
+    state.files = state.files or {}
+    local messages = {}
+    local changed = false
 
-    return "[UPDATE] *Yangi versiya yuklandi:* v" .. tostring(remote) ..
-        "\nBotni bir marta restart qiling (backup: admin.lua.backup)."
+    for _, entry in ipairs(manifest.files) do
+        local msg = updateOne(entry, state)
+        if msg then
+            table.insert(messages, msg)
+            if msg:find("o'rnatildi", 1, true) then changed = true end
+        end
+    end
+    saveState(state)
+
+    if changed then
+        table.insert(messages, "[UPDATE] Yangilanish tugadi. Botni restart qiling.")
+    end
+    if #messages == 0 then return nil end
+    return table.concat(messages, "\n")
 end
 
 return { checkAndUpdate = checkAndUpdate }
