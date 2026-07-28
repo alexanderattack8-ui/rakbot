@@ -223,7 +223,7 @@ function bazaXato(reason)
     base_ok = false
     if base_error_sent then return end
     base_error_sent = true
-    sendTG("⚠️ *Baza ishlamayapti!*\n`" .. tostring(reason) .. "`")
+    sendTG("вљ пёЏ *Baza ishlamayapti!*\n`" .. tostring(reason) .. "`")
 end
 
 function bazaTuzuk()
@@ -299,7 +299,7 @@ end
 function stripHTML(html)
     if not html then return "" end
     local t = html:gsub("<br%s*/?>", " ")
-    t = t:gsub("<li[^>]*>", "• ")
+    t = t:gsub("<li[^>]*>", "вЂў ")
     t = t:gsub("</li>", " ")
     t = t:gsub("<p[^>]*>", " ")
     t = t:gsub("</p>", " ")
@@ -679,7 +679,7 @@ function checkUpdates()
         if ok and res and res.status_code == 200 then
             local data = json.decode(res.text)
             if data and data.version and tonumber(data.version) > script_version then
-                sendTG("🔄 *Yangi versiya chiqdi! (v" .. data.version .. ")*\nGitHub'dan yangilang.")
+                -- Updater o'zi yuklaydi; bu yerda faqat eski tekshiruv xabari chiqmaydi.
             end
         end
     end)
@@ -742,46 +742,46 @@ function telegramPolling()
 
                             if txt:match("^/[%w_]+") then
                                 sendInput(txt)
-                                sendTG("⏳ Buyruq yuborildi:\n`" .. txt .. "`")
+                                sendTG("вЏі Buyruq yuborildi:\n`" .. txt .. "`")
                                 tg_capture_timer = os.clock() + 3.0
 
                             elseif low == "!cmd" then
                                 sendTG(
-                                    "🤖 *MENYU (v4.5)*\n\n" ..
-                                    "📊 `/stats` — Hisobot\n" ..
-                                    "🔄 `!reset` — Hisobotni tozalash\n" ..
-                                    "👥 `!admins` — Onlayn adminlar\n" ..
-                                    "📋 `!forma` — Forma yuborgan adminlar\n" ..
-                                    "🛌 `!pause [daq]` — Uxlash\n" ..
-                                    "💬 `!a [matn]` — Admin chatga yozish\n" ..
-                                    "🔍 `!test [savol]` — Javob testi\n" ..
-                                    "📊 `!status` — Bot holati"
+                                    "рџ¤– *MENYU (v4.5)*\n\n" ..
+                                    "рџ“Љ `/stats` вЂ” Hisobot\n" ..
+                                    "рџ”„ `!reset` вЂ” Hisobotni tozalash\n" ..
+                                    "рџ‘Ґ `!admins` вЂ” Onlayn adminlar\n" ..
+                                    "рџ“‹ `!forma` вЂ” Forma yuborgan adminlar\n" ..
+                                    "рџ›Њ `!pause [daq]` вЂ” Uxlash\n" ..
+                                    "рџ’¬ `!a [matn]` вЂ” Admin chatga yozish\n" ..
+                                    "рџ”Ќ `!test [savol]` вЂ” Javob testi\n" ..
+                                    "рџ“Љ `!status` вЂ” Bot holati"
                                 )
 
                             elseif low == "!admins" then
                                 checking_admins = true
                                 online_admins_table = {}
                                 sendInput("/admins")
-                                sendTG("🔍 Adminlar tekshirilmoqda...")
+                                sendTG("рџ”Ќ Adminlar tekshirilmoqda...")
                                 newTask(function()
                                     wait(2500)
                                     checking_admins = false
-                                    sendTG("✅ Adminlar yangilandi. Jami: `" .. #online_admins_table .. "` ta")
+                                    sendTG("вњ… Adminlar yangilandi. Jami: `" .. #online_admins_table .. "` ta")
                                 end)
 
                             elseif low == "!forma" then
                                 local lines = {}
                                 for nick, cnt in pairs(form_senders) do
-                                    table.insert(lines, "• `" .. nick .. "` — `" .. cnt .. "` ta")
+                                    table.insert(lines, "вЂў `" .. nick .. "` вЂ” `" .. cnt .. "` ta")
                                 end
                                 if #lines > 0 then
-                                    sendTG("📋 *Forma yuborgan adminlar:*\n" .. table.concat(lines, "\n"))
+                                    sendTG("рџ“‹ *Forma yuborgan adminlar:*\n" .. table.concat(lines, "\n"))
                                 else
-                                    sendTG("📋 Hozircha forma yuborgan admin yo\'q.")
+                                    sendTG("рџ“‹ Hozircha forma yuborgan admin yo\'q.")
                                 end
 
                             elseif low == "/stats" or low == "!stats" then
-                                local msg = "📊 *OXIRGI 7 KUNLIK HISOBOT:*\n\n"
+                                local msg = "рџ“Љ *OXIRGI 7 KUNLIK HISOBOT:*\n\n"
                                 local now = os.time()
                                 for i = 6, 0, -1 do
                                     local d      = now - (i * 86400)
@@ -790,9 +790,9 @@ function telegramPolling()
                                     local rp     = cfg.daily_logs[d_str .. "_rep"] or 0
                                     local soat   = cfg.daily_logs[d_str .. "_soat"] or 0
                                     if i == 0 then
-                                        msg = msg .. "🟢 *" .. d_str .. " (" .. d_name .. ") [Bugun]:* Rep `" .. rp .. "` | Soat `" .. soat .. "`\n"
+                                        msg = msg .. "рџџў *" .. d_str .. " (" .. d_name .. ") [Bugun]:* Rep `" .. rp .. "` | Soat `" .. soat .. "`\n"
                                     else
-                                        msg = msg .. "📅 *" .. d_str .. " (" .. d_name .. "):* Rep `" .. rp .. "` | Soat `" .. soat .. "`\n"
+                                        msg = msg .. "рџ“… *" .. d_str .. " (" .. d_name .. "):* Rep `" .. rp .. "` | Soat `" .. soat .. "`\n"
                                     end
                                 end
                                 sendTG(msg)
@@ -801,27 +801,27 @@ function telegramPolling()
                                 cfg.daily_logs = {}
                                 cfg.daily_logs.start_time = os.time()
                                 pcall(function() ini.save(cfg, "settings\\config.txt") end)
-                                sendTG("✅ *Hisobotlar tozalandi!*")
+                                sendTG("вњ… *Hisobotlar tozalandi!*")
 
                             elseif txt:match("^!pause%s+(%d+)") then
                                 local mins = tonumber(txt:match("^!pause%s+(%d+)"))
                                 sleep_end_time = os.time() + (mins * 60)
                                 disconnect()
                                 stopWandering()
-                                sendTG("🛌 Bot `" .. mins .. "` daqiqaga uxlaydi.")
+                                sendTG("рџ›Њ Bot `" .. mins .. "` daqiqaga uxlaydi.")
                                 newTask(function()
                                     while os.time() < sleep_end_time do wait(1000) end
                                     if sleep_end_time ~= 0 then
                                         sleep_end_time = 0
                                         connect()
-                                        sendTG("🟢 Qayta ulanmoqda...")
+                                        sendTG("рџџў Qayta ulanmoqda...")
                                     end
                                 end)
 
                             elseif txt:match("^!a%s+(.+)") then
                                 local msg_text = txt:match("^!a%s+(.+)")
                                 sendInput("/a " .. msg_text)
-                                sendTG("✅ Admin chatga yuborildi: `" .. msg_text .. "`")
+                                sendTG("вњ… Admin chatga yuborildi: `" .. msg_text .. "`")
                             elseif low == "!faqupdate" then
                                 updateFAQFromWeb()
 
@@ -829,22 +829,22 @@ function telegramPolling()
                                 local test_q = txt:match("^!test%s+(.+)")
                                 local reply  = getSmartReply(test_q, "Test")
                                 if reply then
-                                    sendTG("✅ `" .. test_q .. "`\n→ `" .. reply:sub(1, 300) .. "`")
+                                    sendTG("вњ… `" .. test_q .. "`\nв†’ `" .. reply:sub(1, 300) .. "`")
                                 else
                                     local fallback = getFallbackReply(test_q)
-                                    sendTG("✅ `" .. test_q .. "`\n→ Fallback: `" .. fallback .. "`")
+                                    sendTG("вњ… `" .. test_q .. "`\nв†’ Fallback: `" .. fallback .. "`")
                                 end
 
                             elseif low == "!status" then
-                                local sp_st  = is_spectating and "🟢 SP da" or "⚫ SP yo\'q"
-                                local wan_st = is_wandering and "🟢 Yurmoqda" or "🔴 To\'xtagan"
+                                local sp_st  = is_spectating and "рџџў SP da" or "вљ« SP yo\'q"
+                                local wan_st = is_wandering and "рџџў Yurmoqda" or "рџ”ґ To\'xtagan"
                                 local idle   = os.time() - last_activity
                                 sendTG(
-                                    "📊 *Bot Holati (v4.5):*\n" ..
-                                    "👁 SP: " .. sp_st .. "\n" ..
-                                    "🚶 Wandering: " .. wan_st .. "\n" ..
-                                    "⏱ Oxirgi harakat: `" .. idle .. "` soniya oldin\n" ..
-                                    "🤖 AI: " .. (ai_busy and "🔴 Band" or "🟢 Tayyor")
+                                    "рџ“Љ *Bot Holati (v4.5):*\n" ..
+                                    "рџ‘Ѓ SP: " .. sp_st .. "\n" ..
+                                    "рџљ¶ Wandering: " .. wan_st .. "\n" ..
+                                    "вЏ± Oxirgi harakat: `" .. idle .. "` soniya oldin\n" ..
+                                    "рџ¤– AI: " .. (ai_busy and "рџ”ґ Band" or "рџџў Tayyor")
                                 )
                             end
                         end
@@ -887,7 +887,7 @@ function sampev.onServerMessage(color, text)
     -- Telegram capture
     if tg_capture_timer and os.clock() <= tg_capture_timer then
         if not clean:match("%[%d+%]:") and not clean:match("SMS:") and not clean:match("yozdi:") then
-            sendTG("📩 *Server:*\n`" .. clean .. "`")
+            sendTG("рџ“© *Server:*\n`" .. clean .. "`")
             tg_capture_timer = nil
         end
     end
@@ -897,11 +897,11 @@ function sampev.onServerMessage(color, text)
        lower_clean:find("mp boshlan") or lower_clean:find("ishtirok etish uchun") or
        lower_clean:find("tadbiri boshlan") then
         is_mp_active = true
-        sendTG("📢 *MP Boshlandi!*")
+        sendTG("рџ“ў *MP Boshlandi!*")
     elseif lower_clean:find("g'olib bo'ldi") or lower_clean:find("g'olib bolgan") or
            lower_clean:find("golib bolgan") or lower_clean:find("tadbiri tugadi") then
         is_mp_active = false
-        sendTG("🛑 *MP Tugadi!*")
+        sendTG("рџ›‘ *MP Tugadi!*")
     end
 
     -- ===== BOSHQARUV VAQTI =====
@@ -911,14 +911,14 @@ function sampev.onServerMessage(color, text)
         local today  = os.date("%d.%m")
         cfg.daily_logs[today .. "_soat"] = soat
         ini.save(cfg, "settings\\config.txt")
-        sendTG("📊 Boshqaruv vaqti: `" .. daqiqa .. "` daqiqa = `" .. soat .. "` soat.")
+        sendTG("рџ“Љ Boshqaruv vaqti: `" .. daqiqa .. "` daqiqa = `" .. soat .. "` soat.")
     end
 
     -- ===== SHIKOYAT SP NAVBATI =====
     if clean:find("Shikoyat") and clean:find("ID:%s*(%d+)") then
         local target_id = clean:match("ID:%s*(%d+)")
         table.insert(sp_queue, target_id)
-        sendTG("📝 Shikoyat: `" .. target_id .. "` ID navbatga qo'shildi!")
+        sendTG("рџ“ќ Shikoyat: `" .. target_id .. "` ID navbatga qo'shildi!")
     end
 
     -- ===== ADMINLAR RO'YXATI =====
@@ -948,7 +948,7 @@ function sampev.onServerMessage(color, text)
                     sendInput(cc .. " " .. ca .. " // " .. cp)
                     wait(1500)
                     sendInput("/a +")
-                    sendTG("🔨 Jazo:\n`" .. cc .. " " .. ca .. "`")
+                    sendTG("рџ”Ё Jazo:\n`" .. cc .. " " .. ca .. "`")
                 end)
             end
         end
@@ -974,13 +974,13 @@ function sampev.onServerMessage(color, text)
             if talking then
                 active_chat_admin = adm_name
                 active_chat_time  = os.time()
-                sendTG("💬 *Admin (" .. adm_name .. "):*\n_" .. adm_text .. "_")
+                sendTG("рџ’¬ *Admin (" .. adm_name .. "):*\n_" .. adm_text .. "_")
                 newTask(function()
                     wait(math.random(1500, 2500))
                     local ai_reply = getAIChatReply(adm_name .. " sizga yozdi: " .. adm_text)
                     if ai_reply then
                         sendInput("/a " .. ai_reply)
-                        sendTG("🤖 *AI Javob:*\n_" .. ai_reply .. "_")
+                        sendTG("рџ¤– *AI Javob:*\n_" .. ai_reply .. "_")
                     end
                 end)
             end
@@ -992,7 +992,7 @@ function sampev.onServerMessage(color, text)
         local sname, sid = clean:match("(%a+_%a+)%[(%d+)%]")
         if sname and sid and isRPNick(sname) and
            not red_admins[sname] and sname ~= bot_name then
-            sendTG("✉️ *SMS (" .. sname .. "):*\n_" .. clean .. "_")
+            sendTG("вњ‰пёЏ *SMS (" .. sname .. "):*\n_" .. clean .. "_")
             newTask(function()
                 local umsg = clean
                     :gsub(sname .. "%[%d+%]", "")
@@ -1045,8 +1045,8 @@ function sampev.onServerMessage(color, text)
         if f_name and f_name ~= bot_name then
             form_senders[f_name] = (form_senders[f_name] or 0) + 1
             sendTG(
-                "📋 *Forma yubordi:* `" .. f_name .. "`\n" ..
-                "🔢 Jami: `" .. form_senders[f_name] .. "` ta\n" ..
+                "рџ“‹ *Forma yubordi:* `" .. f_name .. "`\n" ..
+                "рџ”ў Jami: `" .. form_senders[f_name] .. "` ta\n" ..
                 "_" .. clean .. "_"
             )
         end
@@ -1080,7 +1080,7 @@ function sampev.onServerMessage(color, text)
             end
 
             if is_plus then
-                sendTG("ℹ️ `" .. rep_name .. " [" .. rep_id .. "]` `+` yubordi (E'tiborsiz).")
+                sendTG("в„№пёЏ `" .. rep_name .. " [" .. rep_id .. "]` `+` yubordi (E'tiborsiz).")
             else
                 newTask(function()
                     if is_mp_active then
@@ -1149,7 +1149,7 @@ Javob "Assalomu alaykum" dan boshlansin.
         newTask(function()
             wait(1000)
             sendInput("/acceptgnews")
-            sendTG("✅ Yangiliklar arizasi tasdiqlandi!")
+            sendTG("вњ… Yangiliklar arizasi tasdiqlandi!")
         end)
     end
 end
@@ -1167,13 +1167,13 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
     last_dialog_id   = id
     last_dialog_time = os.clock()
 
-    if lower_title:find("xush") or lower_title:find("добро") or
-       lower_title:find("yangilik") or lower_title:find("новости") or
+    if lower_title:find("xush") or lower_title:find("РґРѕР±СЂРѕ") or
+       lower_title:find("yangilik") or lower_title:find("РЅРѕРІРѕСЃС‚Рё") or
        lower_title:find("grand mobile") then
         sendDialogResponse(id, 1, 0, ""); return false
     end
 
-    if lower_title:find("avtorizatsiya") or lower_title:find("пароль") then
+    if lower_title:find("avtorizatsiya") or lower_title:find("РїР°СЂРѕР»СЊ") then
         sendDialogResponse(id, 1, 0, cfg.settings.password)
         if not is_logged_in then
             is_logged_in = true
@@ -1184,7 +1184,7 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
                 sendInput("/az"); wait(1500)
                 sendInput("/acceptgnews"); wait(1500)
                 sendInput("/sp")
-                sendTG("📰 O'yinga kirdi!")
+                sendTG("рџ“° O'yinga kirdi!")
                 startWandering()
             end)
         end
@@ -1211,11 +1211,11 @@ function onConnectionClosed()
     stopWandering()
     is_logged_in  = false
     is_spectating = false
-    sendTG("❌ Bot serverdan uzildi.")
+    sendTG("вќЊ Bot serverdan uzildi.")
     newTask(function()
         wait(15000)
         connect()
-        sendTG("🟢 Qayta ulanmoqda...")
+        sendTG("рџџў Qayta ulanmoqda...")
     end)
 end
 
@@ -1228,7 +1228,10 @@ end
 -- =================================================
 
 function onLoad()
-    pcall(updater.checkAndUpdate)
+    local update_ok, update_msg = pcall(updater.checkAndUpdate)
+    if update_ok and update_msg then
+        sendTG(update_msg)
+    end
     if not checkLicense(true) then
         print("[LITSENZIYA] Ruxsat berilmagan nick yoki GitHub mavjud emas. Bot ishga tushmadi.")
         return
@@ -1266,14 +1269,14 @@ function onLoad()
                     sp_timer      = os.time()
                     last_activity = os.time()
                     stopWandering()
-                    sendTG("👁 SP: `" .. tid .. "` ID kuzatilmoqda.")
+                    sendTG("рџ‘Ѓ SP: `" .. tid .. "` ID kuzatilmoqda.")
                 elseif not is_wandering then
-                    -- Na SP, na wandering — 5 sekunddan keyin wandering
+                    -- Na SP, na wandering вЂ” 5 sekunddan keyin wandering
                     if idle > 5 then
                         startWandering()
                     end
                 else
-                    -- Wandering yoqiq — 20 sekunddan keyin SP ga o'tish
+                    -- Wandering yoqiq вЂ” 20 sekunddan keyin SP ga o'tish
                     if os.time() - wander_timer > 20 then
                         stopWandering()
                         spectateRandomPlayer()
@@ -1292,10 +1295,10 @@ function onLoad()
                     wait(500)
                     sendInput("/re " .. task.id)
                     sendTG(
-                        "✅ *Javob Berildi:*\n" ..
-                        "👤 `" .. task.name .. " [" .. task.id .. "]`\n" ..
-                        "❓ `" .. task.text .. "`\n" ..
-                        "🤖 `" .. task.reply .. "`"
+                        "вњ… *Javob Berildi:*\n" ..
+                        "рџ‘¤ `" .. task.name .. " [" .. task.id .. "]`\n" ..
+                        "вќ“ `" .. task.text .. "`\n" ..
+                        "рџ¤– `" .. task.reply .. "`"
                     )
                     wait(1500)
                 end
@@ -1304,8 +1307,8 @@ function onLoad()
 
         print("[BOT] " .. bot_name .. " v4.5 Ishga tushdi!")
         sendTG(
-            "🟢 *Bot Ishga Tushdi! (v4.5)*\n" ..
-            "👤 Ism: `" .. bot_name .. "`"
+            "рџџў *Bot Ishga Tushdi! (v4.5)*\n" ..
+            "рџ‘¤ Ism: `" .. bot_name .. "`"
         )
     else
         print("[XATO] Bot nomi noto'g'ri: " .. bot_name)
