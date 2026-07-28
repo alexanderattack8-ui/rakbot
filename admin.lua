@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v4.6 - TUZATILGAN) ===
+-- === KOD BOSHLANISHI (admin.lua v4.7 - TUZATILGAN) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -12,7 +12,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan -- FIX: yangi Lua'da math.atan2 yo'q
 
 -- ================= VERSIYA =================
-local script_version = 4.6
+local script_version = 4.7
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -132,6 +132,7 @@ local tg_capture_timer = nil
 local is_mp_active = false
 local ai_busy = false
 local is_logged_in = false
+local last_login_time = 0 -- FIX: "O'yinga kirdi" xabari va login ketma-ketligi takrorlanmasin
 
 local active_chat_admin = nil
 local active_chat_time = 0
@@ -793,9 +794,23 @@ end
 -- =================================================
 -- TELEGRAM FUNKSIYALARI
 -- =================================================
-function sendTG(text)
+-- FIX: Telegram'da bir xil xabar qayta-qayta kelardi. Endi 90 soniya ichida
+-- takrorlangan xabar yuborilmaydi (sendTG(text, true) bilan majburan yuborish mumkin).
+local tg_recent = {}
+local TG_DEDUPE = 90
+
+function sendTG(text, force)
     if bot_token == "" or bot_chatid == "" then return end
-    local payload = { chat_id = bot_chatid, text = tostring(text), parse_mode = "Markdown" }
+    local msg = tostring(text)
+    local now = os.time()
+    for k, t in pairs(tg_recent) do
+        if now - t > 600 then tg_recent[k] = nil end
+    end
+    if not force then
+        if tg_recent[msg] and (now - tg_recent[msg]) < TG_DEDUPE then return end
+    end
+    tg_recent[msg] = now
+    local payload = { chat_id = bot_chatid, text = msg, parse_mode = "Markdown" }
     local headers = { ["Content-Type"] = "application/json" }
     newTask(function()
         pcall(function()
@@ -1064,9 +1079,13 @@ function sampev.onServerMessage(color, text)
     if daqiqa then
         local soat = math.floor(tonumber(daqiqa) / 60)
         local today = os.date("%d.%m")
+        local prev = tonumber(cfg.daily_logs[today .. "_soat"])
         cfg.daily_logs[today .. "_soat"] = soat
         pcall(function() ini.save(cfg, "settings\\config.txt") end)
-        sendTG("Boshqaruv vaqti: `" .. daqiqa .. "` daqiqa = `" .. soat .. "` soat.")
+        -- FIX: har /az javobida bir xil xabar kelardi. Endi faqat soat o'zgarsa xabar beradi.
+        if prev ~= soat then
+            sendTG("Boshqaruv vaqti: `" .. daqiqa .. "` daqiqa = `" .. soat .. "` soat.")
+        end
     end
 
     -- ===== SHIKOYAT SP NAVBATI =====
@@ -1341,8 +1360,11 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
 
     if containsAny(lower_title, dialog_pass_keys) then
         sendDialogResponse(id, 1, 0, tostring(cfg.settings.password))
-        if not is_logged_in then
+        -- FIX: dialog qayta chiqsa login ketma-ketligi qaytadan ishga tushib, TG'ga
+        -- "O'yinga kirdi" xabarini spam qilardi. Endi 60 soniyalik qulf bor.
+        if not is_logged_in and (os.time() - last_login_time) > 60 then
             is_logged_in = true
+            last_login_time = os.time()
             newTask(function()
                 wait(4000); spawn()
                 wait(2000); spawn()
@@ -1407,7 +1429,7 @@ end
 -- ASOSIY YUKLASH
 -- =================================================
 function onLoad()
-    local update_ok, update_msg = pcall(updater.checkAndUpdate)
+    local update_ok, update_msg = pcall(updater.checkAndUpdate, script_version)
     if update_ok and update_msg then
         sendTG(tostring(update_msg))
     end
@@ -1508,9 +1530,13 @@ function onLoad()
     end)
 
     print("[BOT] " .. bot_name .. " v" .. tostring(script_version) .. " Ishga tushdi!")
+    local fq, mq = 0, 0
+    for _ in pairs(faq_base) do fq = fq + 1 end
+    for _ in pairs(bot_memory) do mq = mq + 1 end
     sendTG(
         "*Bot Ishga Tushdi! (v" .. tostring(script_version) .. ")*\n" ..
-        "Ism: `" .. tgSafe(bot_name) .. "`"
+        "Ism: `" .. tgSafe(bot_name) .. "`\n" ..
+        "Xotira: `" .. mq .. "` | FAQ: `" .. fq .. "`", true
     )
 end
 -- === KOD TUGASHI ===
