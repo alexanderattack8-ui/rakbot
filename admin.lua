@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v4.7 - TUZATILGAN) ===
+-- === KOD BOSHLANISHI (admin.lua v4.8 - TUZATILGAN) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -12,7 +12,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan -- FIX: yangi Lua'da math.atan2 yo'q
 
 -- ================= VERSIYA =================
-local script_version = 4.7
+local script_version = 4.8
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -924,7 +924,26 @@ function telegramPolling()
                                 newTask(function()
                                     wait(2500)
                                     checking_admins = false
-                                    sendTG("[ADM] Yangilandi. Jami: `" .. #online_admins_table .. "` ta")
+                                    -- FIX: avval faqat son ("Jami: N ta") ko'rsatilardi.
+                                    -- Endi har bir adminning ismi va darajasi ham chiqadi,
+                                    -- eng yuqori darajadan pastga qarab saralab.
+                                    local total = #online_admins_table
+                                    if total == 0 then
+                                        sendTG("[ADM] Hozircha onlayn admin topilmadi.", true)
+                                    else
+                                        table.sort(online_admins_table, function(a, b)
+                                            return (tonumber(a.lvl) or 0) > (tonumber(b.lvl) or 0)
+                                        end)
+                                        local lines = {}
+                                        for _, adm in ipairs(online_admins_table) do
+                                            table.insert(lines, "- `" .. tgSafe(adm.name) .. "` [" .. tostring(adm.id) ..
+                                                "] - " .. tostring(adm.lvl) .. "-daraja")
+                                        end
+                                        sendTG(
+                                            "*Onlayn adminlar (Jami: " .. total .. " ta):*\n" .. table.concat(lines, "\n"),
+                                            true -- FIX: bir xil ro'yxat qayta-qayta so'ralganda ham har doim javob qaytsin
+                                        )
+                                    end
                                 end)
 
                             elseif low == "!forma" then
@@ -946,11 +965,20 @@ function telegramPolling()
                                     local d_str = os.date("%d.%m", d)
                                     local d_name = days_map[os.date("%A", d)] or ""
                                     local rp = cfg.daily_logs[d_str .. "_rep"] or 0
-                                    local soat = cfg.daily_logs[d_str .. "_soat"] or 0
-                                    if i == 0 then
-                                        msg = msg .. "*" .. d_str .. " (" .. d_name .. ") [Bugun]:* Rep `" .. rp .. "` | Soat `" .. soat .. "`\n"
+                                    -- FIX: yangi aniq daqiqa yozuvi bo'lsa o'shandan "N soat M daqiqa"
+                                    -- ko'rinishida hisoblanadi; fix'dan oldingi eski kunlar uchun
+                                    -- faqat "_soat" mavjud bo'lsa o'sha (yaxlitlangan) qiymatga tushiladi.
+                                    local jami_daqiqa = tonumber(cfg.daily_logs[d_str .. "_daqiqa"])
+                                    local soat_str
+                                    if jami_daqiqa then
+                                        soat_str = math.floor(jami_daqiqa / 60) .. " soat " .. (jami_daqiqa % 60) .. " daqiqa"
                                     else
-                                        msg = msg .. "*" .. d_str .. " (" .. d_name .. "):* Rep `" .. rp .. "` | Soat `" .. soat .. "`\n"
+                                        soat_str = (cfg.daily_logs[d_str .. "_soat"] or 0) .. " soat"
+                                    end
+                                    if i == 0 then
+                                        msg = msg .. "*" .. d_str .. " (" .. d_name .. ") [Bugun]:* Rep `" .. rp .. "` | " .. soat_str .. "\n"
+                                    else
+                                        msg = msg .. "*" .. d_str .. " (" .. d_name .. "):* Rep `" .. rp .. "` | " .. soat_str .. "\n"
                                     end
                                 end
                                 sendTG(msg)
@@ -1077,14 +1105,22 @@ function sampev.onServerMessage(color, text)
     -- ===== BOSHQARUV VAQTI (FIX: find() o'rniga match()) =====
     local daqiqa = clean:match("[Bb]ugungi boshqaruv vaqti:%s*(%d+)")
     if daqiqa then
-        local soat = math.floor(tonumber(daqiqa) / 60)
+        local jami_daqiqa = tonumber(daqiqa)
+        -- FIX: avval math.floor(daqiqa/60) bilan qolgan daqiqalar (masalan 59 tasi)
+        -- butunlay tashlab yuborilardi va masalan 119 daqiqa ham, 60 daqiqa ham
+        -- bir xil "1 soat" bo'lib ko'rinardi. Endi qoldiq daqiqa ham saqlanadi va ko'rsatiladi.
+        local soat = math.floor(jami_daqiqa / 60)
+        local qoldiq = jami_daqiqa % 60
         local today = os.date("%d.%m")
-        local prev = tonumber(cfg.daily_logs[today .. "_soat"])
-        cfg.daily_logs[today .. "_soat"] = soat
+        -- FIX: solishtiruv avval yaxlitlangan "soat" bo'yicha edi, shu sababli bir soat
+        -- ichida (masalan 61 dan 119 daqiqagacha) hech qanday yangilanish xabari ketmasdi.
+        -- Endi aniq daqiqa qiymati solishtiriladi.
+        local prev = tonumber(cfg.daily_logs[today .. "_daqiqa"])
+        cfg.daily_logs[today .. "_daqiqa"] = jami_daqiqa -- FIX: aniq daqiqa alohida saqlanadi
+        cfg.daily_logs[today .. "_soat"] = soat -- eski format (faqat soat) bilan moslik uchun qoldirildi
         pcall(function() ini.save(cfg, "settings\\config.txt") end)
-        -- FIX: har /az javobida bir xil xabar kelardi. Endi faqat soat o'zgarsa xabar beradi.
-        if prev ~= soat then
-            sendTG("Boshqaruv vaqti: `" .. daqiqa .. "` daqiqa = `" .. soat .. "` soat.")
+        if prev ~= jami_daqiqa then
+            sendTG("Boshqaruv vaqti: `" .. soat .. " soat " .. qoldiq .. " daqiqa` (jami `" .. jami_daqiqa .. "` daqiqa).")
         end
     end
 
