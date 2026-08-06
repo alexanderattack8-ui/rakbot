@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v4.8 - TUZATILGAN) ===
+-- === KOD BOSHLANISHI (admin.lua v4.9 - TUZATILGAN) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -12,7 +12,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan -- FIX: yangi Lua'da math.atan2 yo'q
 
 -- ================= VERSIYA =================
-local script_version = 4.8
+local script_version = 4.9
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -708,33 +708,54 @@ function getSmartReply(text, sender_name)
     end
 
     -- 4) ADMINLAR BERGAN JAVOBLAR (umumiy xotira bazasi)
-    if bot_memory[lower_text] then
-        return memAnswer(bot_memory[lower_text])
-    end
-    if lower_text:len() >= 5 then
-        for question, value in pairs(bot_memory) do
-            local q = normText(question)
-            if q:len() >= 5 and (lower_text:find(q, 1, true) or q:find(lower_text, 1, true)) then
-                return memAnswer(value)
+    -- FIX: Avval "trusted" (katta admin) javoblarini qidirish, keyin oddiy adminlar
+    local function searchMemory(priority_trusted)
+        if bot_memory[lower_text] then
+            local v = bot_memory[lower_text]
+            if type(v) == "table" then
+                if priority_trusted and not v.trusted then return nil end
+            end
+            return memAnswer(v)
+        end
+        if lower_text:len() >= 5 then
+            for question, value in pairs(bot_memory) do
+                local q = normText(question)
+                local v_trusted = (type(value) == "table") and value.trusted or false
+                if priority_trusted and not v_trusted then goto continue_inner end
+                if q:len() >= 5 and (lower_text:find(q, 1, true) or q:find(lower_text, 1, true)) then
+                    return memAnswer(value)
+                end
+                ::continue_inner::
             end
         end
-    end
-    local words = {}
-    for w in lower_text:gmatch("%S+") do
-        if w:len() > 3 then table.insert(words, w) end
-    end
-    local best_mem, best_mem_score = nil, 0
-    for question, value in pairs(bot_memory) do
-        local score = 0
-        for _, w in ipairs(words) do
-            if question:find(w, 1, true) then score = score + 1 end
+        local words = {}
+        for w in lower_text:gmatch("%S+") do
+            if w:len() > 3 then table.insert(words, w) end
         end
-        if score > best_mem_score then
-            best_mem_score = score
-            best_mem = memAnswer(value)
+        local best_mem, best_mem_score = nil, 0
+        for question, value in pairs(bot_memory) do
+            local v_trusted = (type(value) == "table") and value.trusted or false
+            if priority_trusted and not v_trusted then goto continue_score end
+            local score = 0
+            for _, w in ipairs(words) do
+                if question:find(w, 1, true) then score = score + 1 end
+            end
+            if score > best_mem_score then
+                best_mem_score = score
+                best_mem = memAnswer(value)
+            end
+            ::continue_score::
         end
+        if best_mem_score >= 2 and best_mem then return best_mem end
+        return nil
     end
-    if best_mem_score >= 2 and best_mem then return best_mem end
+
+    -- Avval katta admin (trusted) javoblaridan qidirish
+    local trusted_reply = searchMemory(true)
+    if trusted_reply then return trusted_reply end
+    -- Keyin oddiy admin javoblaridan
+    local normal_reply = searchMemory(false)
+    if normal_reply then return normal_reply end
 
     return nil
 end
@@ -1218,6 +1239,7 @@ function sampev.onServerMessage(color, text)
     end
 
     -- ===== ADMINLAR BERGAN JAVOBLARNI UMUMIY BAZAGA YIG'ISH =====
+    -- FIX: Barcha pattern variantlari ko'rib chiqiladi
     local tid, ans = clean:match("<ADM>.-%[%d+%]%s+.-%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)")
     if not tid then
         tid, ans = clean:match("%[A%].-%[%d+%]%s+%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)")
@@ -1225,25 +1247,55 @@ function sampev.onServerMessage(color, text)
     if not tid then
         tid, ans = clean:match("/ans%s+(%d+)%s+(.+)")
     end
+    -- FIX: Qo'shimcha server formatlari
+    if not tid then
+        tid, ans = clean:match("Admin%s+.-%[(%d+)%]:%s*(.+)")
+    end
+    if not tid then
+        tid, ans = clean:match("%[Report%]%s*.-%[(%d+)%]%s+javob:%s*(.+)")
+    end
     if tid and ans then
-        local ans_admin = clean:match("(%u%a+_%u%a+)%[%d+%]") or clean:match("(%u%a+_%u%a+)")
+        -- FIX: admin nomini aniqroq ushlash (katta va kichik admin uchun)
+        local ans_admin = clean:match("(%u%a+_%u%a+)%[%d+%]")
+        if not ans_admin then ans_admin = clean:match("(%u%a+_%u%a+)") end
         tid = tostring(tid)
         local pend = pending_reports[tid]
         if pend and pend.text then
-            if ans_admin ~= bot_name then
+            -- FIX: bot o'zining reportiga ham, katta admin yopgan reportga ham baza yozmaydi
+            local is_bot_ans = (ans_admin == bot_name)
+            local is_red_ans = (ans_admin and red_admins[ans_admin])
+
+            if not is_bot_ans then
                 local savol = normText(pend.text)
                 local javob = ans:gsub("https?://[%S]+", ""):gsub("%s+", " ")
                 javob = javob:match("^%s*(.-)%s*$") or ans
                 if savol ~= "" and javob ~= "" then
+                    -- FIX: katta admin javobini alohida belgi bilan saqlaymiz (ustunlik berish uchun)
                     bot_memory[savol] = {
                         answer = javob,
                         admin = ans_admin or "Noma'lum",
-                        time = os.time()
+                        time = os.time(),
+                        trusted = is_red_ans or false  -- katta admin javobimi?
                     }
                     saveMemory()
-                    print("[BAZA] O'rgandi (" .. tostring(ans_admin) .. "): " .. savol)
+                    local tag = is_red_ans and "[KATTA ADMIN]" or "[ADMIN]"
+                    print("[BAZA] O'rgandi " .. tag .. " (" .. tostring(ans_admin) .. "): " .. savol)
+                    sendTG(tag .. " `" .. tgSafe(ans_admin or "?") .. "` javobini bazaga qo'shdim:\nSavol: `" .. tgSafe(pend.text) .. "`\nJavob: `" .. tgSafe(javob) .. "`")
                 end
             end
+
+            -- FIX: Katta admin report yopsa, bot o'sha reportga qaytadan "/ans" yubormaydi
+            -- Bu "farm" ko'rinishini to'liq yo'q qiladi
+            if is_red_ans then
+                -- report_queue dan shu ID ni olib tashlash
+                for i = #report_queue, 1, -1 do
+                    if tostring(report_queue[i].id) == tid then
+                        table.remove(report_queue, i)
+                        sendTG("[INFO] Katta admin `" .. tgSafe(ans_admin) .. "` yopdi - bot `" .. tid .. "` IDga javob bermaydi.")
+                    end
+                end
+            end
+
             pending_reports[tid] = nil
         end
     end
@@ -1259,6 +1311,21 @@ function sampev.onServerMessage(color, text)
                 tgSafe(clean)
             )
         end
+    end
+
+    -- ===== KATTA ADMIN /RE (CLOSE) QILSA NAVBATDAN OL =====
+    -- FIX: /re ID qilganda ham bot o'sha reportga javob bermasin
+    local closed_id = clean:match("Report%s+#?(%d+)%s+yopildi")
+    if not closed_id then closed_id = clean:match("%[(%d+)%]%s+report.*yopildi") end
+    if not closed_id then closed_id = clean:match("^/re%s+(%d+)$") end
+    if closed_id then
+        closed_id = tostring(closed_id)
+        for i = #report_queue, 1, -1 do
+            if tostring(report_queue[i].id) == closed_id then
+                table.remove(report_queue, i)
+            end
+        end
+        pending_reports[closed_id] = nil
     end
 
     -- ===== REPORTLAR =====
