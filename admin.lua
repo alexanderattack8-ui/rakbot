@@ -148,6 +148,7 @@ local faq_updating = false
 local base_ok = true
 local base_error_sent = false
 local form_senders = {}
+local pending_admin_mirrors = {} -- FIX: target ID bo'yicha navbatdagi mirror buyruqlar (ID qayta ishlatilishidan himoya uchun)
 
 local FAQ_UPDATE_INTERVAL = 7 * 86400
 local PENDING_TTL = 1800 -- FIX: javobsiz reportlar 30 daqiqadan keyin tozalanadi (memory leak)
@@ -1163,6 +1164,13 @@ function sampev.onServerMessage(color, text)
     end
 
     -- ===== BOSHQA ADMIN JAZO BERSA =====
+    -- FIX: SA-MP'da ID'lar qayta ishlatiladi - eski nishon (target) chiqib ketib, o'sha ID'ga
+    -- YANGI KIRGAN o'yinchi o'tirsa, kechikkan (wait 1500) mirror buyruq eski buyruqni ENDI
+    -- o'sha ID'dagi YANGI (butunlay boshqa) odamga otib yuborishi mumkin edi. Endi buyruq
+    -- otishdan oldin ID hali ham o'sha odamnikimi (nick bo'yicha) tekshiriladi; agar egasi
+    -- almashgan bo'lsa, buyruq yuborilmaydi. Shu ID uchun oldin navbatga qo'yilgan (hali
+    -- otilmagan) mirror bo'lsa, yangisi kelganda eskisi ("o'zinikini") darhol bekor qilinadi -
+    -- ikkalasi ustma-ust otilmasin.
     local a_name, a_cmd, a_args = clean:match("<ADM>%s*%(%d+%)%s*(%a+_%a+)%[%d+%]:%s*(/[%w]+)%s+(.+)")
     if not a_name then
         a_name, a_cmd, a_args = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(/[%w]+)%s+(.+)")
@@ -1176,12 +1184,52 @@ function sampev.onServerMessage(color, text)
             if fl and ln then
                 local cp = fl .. "." .. ln
                 local cc, ca = a_cmd, a_args
+                local target_id = ca:match("^(%d+)")
+                local snap_nick = nil
+                local token = { cancelled = false }
+
+                if target_id then
+                    -- FIX: shu ID uchun hali otilmagan eski mirror bo'lsa - o'zinikini bekor qilamiz
+                    local old_token = pending_admin_mirrors[target_id]
+                    if old_token then old_token.cancelled = true end
+                    pending_admin_mirrors[target_id] = token
+
+                    local nick_ok, nick_now = pcall(sampGetPlayerNickname, tonumber(target_id))
+                    if nick_ok and nick_now and nick_now ~= "" then
+                        snap_nick = nick_now
+                    end
+                end
+
                 newTask(function()
                     wait(1500)
-                    sendInput(cc .. " " .. ca .. " // " .. cp)
-                    wait(1500)
-                    sendInput("/a +")
-                    sendTG("[JAZO]\n`" .. tgSafe(cc .. " " .. ca) .. "`")
+
+                    local stale = false
+                    if target_id then
+                        if token.cancelled then
+                            stale = true
+                        elseif snap_nick then
+                            local nick_ok2, nick_check = pcall(sampGetPlayerNickname, tonumber(target_id))
+                            if not nick_ok2 or not nick_check or nick_check == "" or nick_check ~= snap_nick then
+                                stale = true -- ID egasi almashdi (yangi kirgan o'yinchi) yoki o'sha odam chiqib ketdi
+                            end
+                        end
+                    end
+
+                    if stale then
+                        sendTG(
+                            "[JAZO BEKOR QILINDI]\n`" .. tgSafe(cc .. " " .. ca) .. "`\n" ..
+                            "Sabab: `" .. tostring(target_id) .. "` ID egasi almashdi, eski buyruq yangi kirgan odamga tegmasligi uchun yuborilmadi."
+                        )
+                    else
+                        sendInput(cc .. " " .. ca .. " // " .. cp)
+                        wait(1500)
+                        sendInput("/a +")
+                        sendTG("[JAZO]\n`" .. tgSafe(cc .. " " .. ca) .. "`")
+                    end
+
+                    if target_id and pending_admin_mirrors[target_id] == token then
+                        pending_admin_mirrors[target_id] = nil
+                    end
                 end)
             end
         end
