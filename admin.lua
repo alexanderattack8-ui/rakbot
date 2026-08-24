@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v5.3 - To'liq va Yangilangan) ===
+-- === KOD BOSHLANISHI (admin.lua v5.4 - To'liq va Yangilangan) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 5.3
+local script_version = 5.4
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -1363,6 +1363,9 @@ function onLoad()
                     local reply = task.reply
                     if not reply or reply == "" then reply = getFallbackReply(task.text) end
                     sendInput("/ans " .. tostring(task.id) .. " " .. reply)
+
+                    -- KIMGA JAVOB BERGANINI TELEGRAMGA YUBORISH QISMI
+                    sendTG("✅ *Bot javob berdi:*\n👤 O'yinchi: `" .. tgSafe(task.name) .. "` (ID: " .. task.id .. ")\n❓ Savol: `" .. tgSafe(task.text) .. "`\n💬 Javob: `" .. tgSafe(reply) .. "`")
 
                     local today = os.date("%d.%m")
                     cfg.daily_logs[today .. "_rep"] = (tonumber(cfg.daily_logs[today .. "_rep"]) or 0) + 1
