@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v5.8 - To'liq yoyilgan + Pause funksiyasi) ===
+-- === KOD BOSHLANISHI (admin.lua v5.9 - Buglarsiz va Xavfsiz Ulanish bilan) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,9 +10,28 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 5.8
+local script_version = 5.9
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
+
+-- ================= XAVFSIZ UZILISH VA ULANISH =================
+local function botDisconnect()
+    pcall(function()
+        if type(disconnect) == "function" then disconnect()
+        elseif type(reconnect) == "function" then reconnect(9999999)
+        elseif type(runCommand) == "function" then runCommand("!disconnect")
+        end
+    end)
+end
+
+local function botConnect()
+    pcall(function()
+        if type(connect) == "function" then connect()
+        elseif type(reconnect) == "function" then reconnect(500)
+        elseif type(runCommand) == "function" then runCommand("!reconnect")
+        end
+    end)
+end
 
 -- ================= CONFIG =================
 local cfg = ini.load({
@@ -136,7 +155,7 @@ local center_y = 0
 local current_speed = 0.05
 local is_hiding = false
 local sleep_end_time = 0
-local is_paused = false -- QO'SHILDI: BOTNI TO'XTATISH UCHUN O'ZGARUVCHI
+local is_paused = false 
 
 local tg_capture_timer = nil
 local is_mp_active = false
@@ -1087,28 +1106,26 @@ function telegramPolling()
                                 cfg.daily_logs = { start_time = os.time() }
                                 pcall(function() ini.save(cfg, "settings\\config.txt") end)
                                 sendTG("*Hisobotlar tozalandi!*")
-                            -- QO'SHILDI: CHEKSIZ PAUZA VA UNPAUSE
                             elseif low == "!pause" then
                                 is_paused = true
                                 sleep_end_time = 0
                                 stopWandering()
-                                disconnect()
+                                botDisconnect()
                                 sendTG("⏸ *[TIZIM]* Bot to'xtatildi (Pause). Serverdan uzildi.\nYana ishga tushirish uchun `!unpause` deb yozing.")
                             elseif low == "!unpause" then
                                 if is_paused then
                                     is_paused = false
-                                    connect()
+                                    botConnect()
                                     sendTG("▶️ *[TIZIM]* Bot qayta ishga tushirildi (Unpause). Serverga ulanmoqda...")
                                 else
                                     sendTG("⚠️ Bot onsuz ham ishlab turibdi.")
                                 end
-                            -- VAQTLI PAUZA (ESKI)
                             elseif txt:match("^!pause%s+(%d+)") then
                                 local mins = tonumber(txt:match("^!pause%s+(%d+)")) or 0
                                 if mins > 0 then
                                     sleep_end_time = os.time() + (mins * 60)
                                     stopWandering()
-                                    disconnect()
+                                    botDisconnect()
                                     sendTG("[PAUSE] Bot `" .. mins .. "` daqiqaga uxlaydi.")
                                     newTask(function()
                                         while os.time() < sleep_end_time do 
@@ -1116,7 +1133,7 @@ function telegramPolling()
                                         end
                                         if sleep_end_time ~= 0 then
                                             sleep_end_time = 0
-                                            connect()
+                                            botConnect()
                                             sendTG("[NET] Qayta ulanmoqda...")
                                         end
                                     end)
@@ -1142,8 +1159,8 @@ end
 -- SAMP EVENTLAR
 -- =================================================
 function sampev.onSendPlayerSync(data)
-    if license_stopped or is_hiding then 
-        return 
+    if license_stopped or is_hiding or is_paused then 
+        return false 
     end
     if is_wandering then
         data.keysData = 1
@@ -1169,7 +1186,7 @@ function sampev.onSendPlayerSync(data)
 end
 
 function sampev.onServerMessage(color, text)
-    if license_stopped then 
+    if license_stopped or is_paused then 
         return 
     end
     local clean = tostring(text):gsub("{......}", "")
@@ -1219,9 +1236,6 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- =================================================
-    -- 1. BOSHQA ADMIN FORMANI QABUL QILGANINI TEKSHIRISH
-    -- =================================================
     local adm_chat_name, adm_chat_text = clean:match("<ADM>.-(%a+_%a+)%[%d+%]:%s*(.+)")
     if not adm_chat_name then
         adm_chat_name, adm_chat_text = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(.+)")
@@ -1241,9 +1255,6 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- =================================================
-    -- 2. SERVER JAZONI E'LON QILGANINI KUZATISH
-    -- =================================================
     local punished_id = clean:match("jazoladi.-%[(%d+)%]") or
                         clean:match("jazo berdi.-%[(%d+)%]") or
                         clean:match("posadil.-%[(%d+)%]") or
@@ -1260,9 +1271,6 @@ function sampev.onServerMessage(color, text)
         pending_admin_mirrors[punished_id].cancelled = true
     end
 
-    -- =================================================
-    -- 3. FORMANI USHLASH VA KUTISH MANTIG'I
-    -- =================================================
     local a_name, a_cmd, a_args = clean:match("<ADM>%s*%(%d+%)%s*(%a+_%a+)%[%d+%]:%s*(/[%w]+)%s+(.+)")
     if not a_name then 
         a_name, a_cmd, a_args = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(/[%w]+)%s+(.+)") 
@@ -1301,7 +1309,6 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- ADMIN CHAT AI QISMI
     if adm_chat_name and adm_chat_text and adm_chat_name ~= bot_name and not red_admins[adm_chat_name] then
         local first_word = adm_chat_text:lower():match("^(%S+)") or ""
         if not allowed_cmds[first_word] then
@@ -1335,7 +1342,6 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- SMS AI QISMI
     if clean:match("^SMS") or clean:match("yozdi:") then
         local sname, sid = clean:match("(%a+_%a+)%[(%d+)%]")
         if sname and sid and isRPNick(sname) and not red_admins[sname] and sname ~= bot_name then
@@ -1352,7 +1358,6 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- REPORT JAVOBLARINI O'RGANISH VA KUTISH
     local tid, ans = clean:match("<ADM>.-%[%d+%]%s+.-%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)")
     if not tid then 
         tid, ans = clean:match("%[A%].-%[%d+%]%s+%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)") 
@@ -1444,7 +1449,6 @@ function sampev.onServerMessage(color, text)
             local lower_rep = rep_text:lower():match("^%s*(.-)%s*$") or ""
             local is_plus = (lower_rep:match("^[+%s]+$") ~= nil)
             
-            -- Mashina ag'darilganini tekshirish
             local is_flipped = (lower_rep:find("ag'dar") or lower_rep:find("agdar") or lower_rep:find("to'ntar") or lower_rep:find("tontar") or lower_rep:find("flip") or lower_rep:find("korjom") or lower_rep:find("g'ildirak"))
 
             if not is_plus then
@@ -1463,7 +1467,6 @@ function sampev.onServerMessage(color, text)
                         sendInput("/flip " .. q_id)
                         final_reply = "Assalomu alaykum, mashinangizni to'g'rilab qo'ydim. Ehtiyotkorroq haydang."
                     else
-                        -- Insoniy kutish vaqti
                         local text_len = string.len(q_text)
                         local dynamic_delay = math.random(3000, 6000) + (text_len * 50)
                         if dynamic_delay > 12000 then 
@@ -1474,7 +1477,6 @@ function sampev.onServerMessage(color, text)
                         final_reply = getSmartReply(q_text, q_name)
                         
                         if not final_reply then
-                            -- So'kinish filtri
                             local bad_words = {"skn", "jlb", "dalba", "haqorat", "kot", "qoto", "jala", "skay"}
                             local is_bad = false
                             for _, bw in ipairs(bad_words) do 
@@ -1598,7 +1600,7 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
 end
 
 -- =================================================
--- ULANISH EVENTLARI (O'ZGARTIRILGAN)
+-- ULANISH EVENTLARI
 -- =================================================
 function onConnectionClosed()
     stopWandering()
@@ -1615,7 +1617,7 @@ function onConnectionClosed()
         if license_stopped or is_paused or sleep_end_time > os.time() then 
             return 
         end
-        connect()
+        botConnect()
     end)
 end
 
@@ -1672,14 +1674,14 @@ function onLoad()
                 if not licenseGuard() then
                     license_stopped = true
                     stopWandering()
-                    pcall(disconnect)
+                    botDisconnect()
                     return
                 end
                 prunePending()
             end
 
             if sleep_end_time > os.time() or is_paused then
-                -- QO'SHILDI: Agar pauza holatida bo'lsa, hech qanday harakat qilmaydi
+                -- Kutish jarayoni
             else
                 local idle = os.time() - last_activity
 
