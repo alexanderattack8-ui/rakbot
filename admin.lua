@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v5.7 - To'liq yoyilgan versiya) ===
+-- === KOD BOSHLANISHI (admin.lua v5.8 - To'liq yoyilgan + Pause funksiyasi) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 5.7
+local script_version = 5.8
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -136,6 +136,7 @@ local center_y = 0
 local current_speed = 0.05
 local is_hiding = false
 local sleep_end_time = 0
+local is_paused = false -- QO'SHILDI: BOTNI TO'XTATISH UCHUN O'ZGARUVCHI
 
 local tg_capture_timer = nil
 local is_mp_active = false
@@ -329,7 +330,6 @@ end
 function memAnswer(v)
     if type(v) == "table" then 
         if v[1] then 
-            -- Massivdan tasodifiy javobni tanlash
             local rand_idx = math.random(1, #v)
             return v[rand_idx].answer
         elseif v.answer then 
@@ -1046,7 +1046,7 @@ function telegramPolling()
                                 sendTG("[TG] Buyruq yuborildi:\n`" .. tgSafe(txt) .. "`")
                                 tg_capture_timer = os.clock() + 3.0
                             elseif low == "!cmd" then
-                                sendTG("*MENYU (v" .. tostring(script_version) .. ")*\n\n`/stats` - Hisobot\n`!reset` - Tozalash\n`!admins` - Onlayn adminlar\n`!forma` - Forma yuborganlar\n`!pause [daq]` - Uxlash\n`!a [matn]` - Admin chat\n`!test [savol]` - Javob testi\n`!faqupdate` - FAQ yangilash\n`!status` - Bot holati")
+                                sendTG("*MENYU (v" .. tostring(script_version) .. ")*\n\n`/stats` - Hisobot\n`!reset` - Tozalash\n`!admins` - Onlayn adminlar\n`!forma` - Forma yuborganlar\n`!pause` - Cheksiz uxlash\n`!unpause` - Qayta ishlash\n`!pause [daq]` - Vaqtli uxlash\n`!a [matn]` - Admin chat\n`!faqupdate` - FAQ yangilash\n`!status` - Bot holati")
                             elseif low == "!admins" then
                                 checking_admins = true
                                 online_admins_table = {}
@@ -1087,6 +1087,22 @@ function telegramPolling()
                                 cfg.daily_logs = { start_time = os.time() }
                                 pcall(function() ini.save(cfg, "settings\\config.txt") end)
                                 sendTG("*Hisobotlar tozalandi!*")
+                            -- QO'SHILDI: CHEKSIZ PAUZA VA UNPAUSE
+                            elseif low == "!pause" then
+                                is_paused = true
+                                sleep_end_time = 0
+                                stopWandering()
+                                disconnect()
+                                sendTG("⏸ *[TIZIM]* Bot to'xtatildi (Pause). Serverdan uzildi.\nYana ishga tushirish uchun `!unpause` deb yozing.")
+                            elseif low == "!unpause" then
+                                if is_paused then
+                                    is_paused = false
+                                    connect()
+                                    sendTG("▶️ *[TIZIM]* Bot qayta ishga tushirildi (Unpause). Serverga ulanmoqda...")
+                                else
+                                    sendTG("⚠️ Bot onsuz ham ishlab turibdi.")
+                                end
+                            -- VAQTLI PAUZA (ESKI)
                             elseif txt:match("^!pause%s+(%d+)") then
                                 local mins = tonumber(txt:match("^!pause%s+(%d+)")) or 0
                                 if mins > 0 then
@@ -1112,7 +1128,7 @@ function telegramPolling()
                                 updateFAQFromWeb(true)
                             elseif low == "!status" then
                                 local idle = os.time() - last_activity
-                                sendTG("*Bot Holati (v" .. tostring(script_version) .. "):*\nSP: " .. (is_spectating and "Ha" or "Yo'q") .. "\nYurmoqda: " .. (is_wandering and "Ha" or "Yo'q") .. "\nOxirgi harakat: `" .. idle .. "` soniya oldin\nAI: " .. (ai_busy and "Band" or "Tayyor"))
+                                sendTG("*Bot Holati (v" .. tostring(script_version) .. "):*\nSP: " .. (is_spectating and "Ha" or "Yo'q") .. "\nYurmoqda: " .. (is_wandering and "Ha" or "Yo'q") .. "\nOxirgi harakat: `" .. idle .. "` soniya oldin\nAI: " .. (ai_busy and "Band" or "Tayyor") .. "\nPauza holati: " .. (is_paused and "To'xtatilgan" or "Ishlamoqda"))
                             end
                         end
                     end
@@ -1304,7 +1320,6 @@ function sampev.onServerMessage(color, text)
                 active_chat_admin = adm_chat_name
                 active_chat_time = os.time()
                 
-                -- Telegramga zudlik bilan TREVOGA xabar yuborish
                 sendTG("🚨 *DIQQAT! Admin chatda sizni chaqirishmoqda!* 🚨\n👤 *Admin:* `" .. tgSafe(adm_chat_name) .. "`\n💬 *Matn:* `" .. tgSafe(adm_chat_text) .. "`", true)
 
                 local a_nm, a_tx = adm_chat_name, adm_chat_text
@@ -1583,7 +1598,7 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
 end
 
 -- =================================================
--- ULANISH EVENTLARI
+-- ULANISH EVENTLARI (O'ZGARTIRILGAN)
 -- =================================================
 function onConnectionClosed()
     stopWandering()
@@ -1591,13 +1606,13 @@ function onConnectionClosed()
     is_spectating = false
     sendTG("[NET] Bot serverdan uzildi.")
     
-    if license_stopped or sleep_end_time > os.time() then 
+    if license_stopped or is_paused or sleep_end_time > os.time() then 
         return 
     end
     
     newTask(function()
         wait(15000)
-        if license_stopped or sleep_end_time > os.time() then 
+        if license_stopped or is_paused or sleep_end_time > os.time() then 
             return 
         end
         connect()
@@ -1643,7 +1658,6 @@ function onLoad()
             wait(1000)
             tick = tick + 1
 
-            -- Web App uchun loglarni yozish
             if tick % 2 == 0 then
                 pcall(function()
                     local f = io.open(web_log_file, "w")
@@ -1664,8 +1678,8 @@ function onLoad()
                 prunePending()
             end
 
-            if sleep_end_time > os.time() then
-                -- Kutish
+            if sleep_end_time > os.time() or is_paused then
+                -- QO'SHILDI: Agar pauza holatida bo'lsa, hech qanday harakat qilmaydi
             else
                 local idle = os.time() - last_activity
 
@@ -1700,7 +1714,6 @@ function onLoad()
                     
                     sendInput("/ans " .. tostring(task.id) .. " " .. reply)
 
-                    -- KIMGA JAVOB BERGANINI TELEGRAMGA YUBORISH QISMI
                     sendTG("✅ *Bot javob berdi:*\n👤 O'yinchi: `" .. tgSafe(task.name) .. "` (ID: " .. task.id .. ")\n❓ Savol: `" .. tgSafe(task.text) .. "`\n💬 Javob: `" .. tgSafe(reply) .. "`")
 
                     local today = os.date("%d.%m")
