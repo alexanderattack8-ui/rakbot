@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v6.2 - Admin chat 30-40 sek. AI) ===
+-- === KOD BOSHLANISHI (admin.lua v6.5 - Gemini Fix & No Player Commands) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 6.2
+local script_version = 6.5
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -242,12 +242,8 @@ local auto_replies = {
     ["nega qamadingiz"] = REP_SHIK,
     ["meni aybim yo'q"] = REP_SHIK,
     ["sababsiz"] = REP_SHIK,
-    ["yeching"] = "Assalomu aleykum, administrator bunday jarayonlarga aralashmaydi.",
-    ["pul bering"] = "Assalomu aleykum, keyingi off-top uchun jazo qo'llaniladi.",
-    ["qayerda"] = REP_NAVI,
-    ["topib ber"] = REP_NAVI,
-    ["qanday boraman"] = REP_NAVI,
-    ["qanday ishlayman"] = "Assalomu alaykum, bu RP jarayon, o'zingiz bilib olishingiz kerak."
+    ["yeching"] = "Assalomu alaykum, administrator bunday jarayonlarga aralashmaydi.",
+    ["pul bering"] = "Assalomu alaykum, keyingi off-top uchun jazo qo'llaniladi."
 }
 
 -- ================= RUXSAT ETILGAN BUYRUQLAR =================
@@ -593,11 +589,14 @@ function translateToUzbek(text, is_title)
     local limit = is_title and 100 or 900
     local prompt = "Quyidagi matnni ruschadan o'zbek tiliga tarjima qil. FAQAT tarjima matnini qaytar, hech qanday izoh, kirish so'zi yoki tirnoq ishlatma."
 
+    -- JSON break bo'lmasligi uchun matnni tozalash
+    local safe_text = text:gsub('"', ''):gsub('\\', ''):gsub('\n', ' '):gsub('\r', '')
+
     local payload = {
         contents = { 
             { 
                 parts = { 
-                    { text = prompt .. "\n\n" .. text } 
+                    { text = prompt .. "\n\n" .. safe_text } 
                 } 
             } 
         },
@@ -608,15 +607,19 @@ function translateToUzbek(text, is_title)
     local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
 
     local ok, response = pcall(function()
-        return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 15 })
+        return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 15.0 })
     end)
 
-    if ok and response and response.status_code == 200 then
-        local ok2, data = pcall(json.decode, response.text)
-        if ok2 and data and data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts and data.candidates[1].content.parts[1] then
-            local out = data.candidates[1].content.parts[1].text
-            out = out:gsub('^"(.*)"$', "%1")
-            return out:match("^%s*(.-)%s*$")
+    if ok and response then
+        if response.status_code == 200 then
+            local ok2, data = pcall(json.decode, response.text)
+            if ok2 and data and data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts and data.candidates[1].content.parts[1] then
+                local out = data.candidates[1].content.parts[1].text
+                out = out:gsub('^"(.*)"$', "%1")
+                return out:match("^%s*(.-)%s*$")
+            end
+        else
+            print("[GEMINI TARJIMA XATO] " .. tostring(response.text))
         end
     end
     return nil
@@ -742,7 +745,7 @@ function updateFAQFromWeb(manual)
 end
 
 -- =================================================
--- AI FUNKSIYALARI
+-- AI FUNKSIYALARI (KUCHAYTIRILGAN FIX)
 -- =================================================
 function askGemini(system_prompt, user_text)
     if gemini_key == "" or ai_busy then 
@@ -751,29 +754,38 @@ function askGemini(system_prompt, user_text)
     
     ai_busy = true
     
-    local safe = tostring(user_text or ""):gsub('"', ''):gsub('\\', '')
+    -- Xatoni oldini olish uchun matnni maksimal darajada tozalaymiz
+    local safe = tostring(user_text or ""):gsub('"', ''):gsub('\\', ''):gsub('\n', ' '):gsub('\r', '')
+    
     local payload = {
         contents = { 
             { parts = { { text = system_prompt .. "\n\nMatn: " .. safe } } } 
         },
-        generationConfig = { temperature = 0.6, maxOutputTokens = 80 }
+        generationConfig = { temperature = 0.5, maxOutputTokens = 90 }
     }
     
     local headers = { ["Content-Type"] = "application/json" }
     local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
     
     local ok, response = pcall(function()
-        return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 6.0 })
+        -- Vaqtni 12 soniyaga oshirdik, ba'zida API javob berishi uzoqqa cho'ziladi
+        return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 12.0 })
     end)
     
     ai_busy = false
     
-    if ok and response and response.status_code == 200 then
-        local okd, data = pcall(json.decode, response.text)
-        if okd and data and data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts and data.candidates[1].content.parts[1] then
-            local out = data.candidates[1].content.parts[1].text:gsub("\n", " ")
-            return out
+    if ok and response then
+        if response.status_code == 200 then
+            local okd, data = pcall(json.decode, response.text)
+            if okd and data and data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts and data.candidates[1].content.parts[1] then
+                local out = data.candidates[1].content.parts[1].text:gsub("\n", " ")
+                return out
+            end
+        else
+            print("[GEMINI API XATO] KOD: " .. tostring(response.status_code) .. " JAVOB: " .. tostring(response.text))
         end
+    else
+        print("[GEMINI ULANISH XATOSI] Internet yoki so'rovda muammo.")
     end
     
     return nil
@@ -788,7 +800,7 @@ function getAIChatReply(text, chat_type)
         )
     else
         prompt = string.format(
-            "Siz serverning administratori '%s' siz. O'yinchi sizga SMS yozdi. Qisqa, tabiiy va do'stona ohangda o'zbek tilida (1 gap) javob bering. Link yozmang.",
+            "Siz serverning administratori '%s' siz. O'yinchi sizga SMS yozdi. Qisqa, tabiiy va do'stona ohangda o'zbek tilida (1 gap) javob bering. DIQQAT: O'yinchilarda / bilan yoziladigan buyruqlar yo'q, ularga /komanda deb maslahat bermang. Link yozmang.",
             bot_name
         )
     end
@@ -931,8 +943,6 @@ function getFallbackReply(rep_text)
         return "Assalomu alaykum, administrator o'yinchi mulkiga aralashmaydi."
     elseif lower_rep:find("uy") or lower_rep:find("biznes") then 
         return "Assalomu alaykum, ko'chmas mulk bo'yicha tegishli bo'limga murojaat qiling."
-    elseif lower_rep:find("ish") or lower_rep:find("kasb") then 
-        return "Assalomu alaykum, ish haqida ma'lumot olish uchun /works buyrug'ini yozing."
     else 
         return "Assalomu alaykum, savolingizni ko'rib chiqmoqdaman." 
     end
@@ -1293,7 +1303,7 @@ function sampev.onServerMessage(color, text)
     end
 
     -- =================================================
-    -- FORMANI USHLASH (BIZ TOMONDAN YUBORILGANDA KUTISH)
+    -- FORMANI USHLASH
     -- =================================================
     local a_name, a_cmd, a_args = clean:match("<ADM>%s*%(%d+%)%s*(%a+_%a+)%[%d+%]:%s*(/[%w]+)%s+(.+)")
     if not a_name then 
@@ -1334,7 +1344,7 @@ function sampev.onServerMessage(color, text)
     end
 
     -- =================================================
-    -- ADMIN CHAT AI QISMI (30 - 40 soniya kutish bilan)
+    -- ADMIN CHAT AI QISMI
     -- =================================================
     if adm_chat_name and adm_chat_text and adm_chat_name ~= bot_name and not red_admins[adm_chat_name] then
         local first_word = adm_chat_text:lower():match("^(%S+)") or ""
@@ -1347,7 +1357,6 @@ function sampev.onServerMessage(color, text)
                 short_name = short_name:lower() 
             end
             
-            -- Botning ismi yoki "bot" so'zi ishtirok etsa yoxud faol muloqot bo'lsa
             if (short_name and lower_adm:find(short_name, 1, true)) or lower_adm:find("bot", 1, true) or (active_chat_admin == adm_chat_name and (os.time() - active_chat_time) <= chat_timeout_seconds) then
                 talking = true
             end
@@ -1360,7 +1369,6 @@ function sampev.onServerMessage(color, text)
 
                 local a_nm, a_tx = adm_chat_name, adm_chat_text
                 newTask(function()
-                    -- INSONDEK KUTISH (30 dan 40 soniyagacha)
                     wait(math.random(30000, 40000))
                     
                     local ai_reply = getAIChatReply(a_nm .. " siz haqingizda yozdi: " .. a_tx, "admin")
@@ -1524,7 +1532,11 @@ function sampev.onServerMessage(color, text)
                         final_reply = getSmartReply(q_text, q_name)
                         
                         if not final_reply then
-                            local prompt = string.format([[Siz SA-MP serverida "%s" ismli administratorsiz. O'yinchi savoli: "%s". Bitta gapda o'zbek tilida javob bering. Har doim bir xil salomlashmang, o'rniga "Salom", "Eshitaman", yoki "Assalomu alaykum" kabi har xil so'zlar bilan boshlang. Link ishlatmang.]], bot_name, q_text)
+                            local prompt = string.format([[Siz SA-MP serverida "%s" ismli administratorsiz. O'yinchi savoli: "%s".
+QOIDALAR:
+1. Bitta gapda, qisqa o'zbek tilida javob bering. Har doim bir xil salomlashmang.
+2. O'yinchilar uchun / (slash) bilan yoziladigan buyruqlar UMMUMAN YO'Q! Shuning uchun hech qachon /komanda (masalan /works, /gps, /donate) maslahat bermang.
+3. Link ishlatmang.]], bot_name, q_text)
                             
                             final_reply = askGemini(prompt, q_text)
                             
