@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v6.9 - Smart Swear Filter) ===
+-- === KOD BOSHLANISHI (admin.lua v7.0 - High Admins Alert & Fixes) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 6.9
+local script_version = 7.0
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -192,12 +192,13 @@ local base_error_sent = false
 local FAQ_UPDATE_INTERVAL = 7 * 86400
 local PENDING_TTL = 1800 
 
--- ================= KATTA ADMINLAR =================
+-- ================= YUQORI ADMINLAR RO'YXATI =================
 local red_admins = {
-    ["Maga_By"] = true,
-    ["Ivan_Vasilyev"] = true,
     ["John_Medvedev"] = true,
-    ["Ace_Alonso"] = true
+    ["Asilbek_Imanov"] = true,
+    ["Ivan_Vasilyev"] = true,
+    ["Felix_Hatred"] = true,
+    ["Maga_By"] = true
 }
 
 -- ================= FAQ BO'LIMLARI =================
@@ -205,9 +206,8 @@ local faq_sections = {
     { name = "Yordam markazi", url = "https://support.grnd.gg/ru/" }
 }
 
--- ================= SO'KINISHLAR LUG'ATI (YANGILANGAN) =================
+-- ================= SO'KINISHLAR LUG'ATI =================
 local exact_bad_words = {
-    -- Faqat alohida so'z bo'lgandagina ushlash uchun (Yordam kabi so'zlarda adashmaydi)
     "am", "ami", "amiga", "amini", "aminga", "amingni", "aming", "amlar",
     "kot", "koti", "kotiga", "kotini", "kotinga", "kotingni", "koting", "kotlar",
     "sik", "sikay", "sikaman", "sikamiz", "sikdi", "sikib", "sikiw", "sikish",
@@ -215,7 +215,6 @@ local exact_bad_words = {
 }
 
 local partial_bad_words = {
-    -- So'zning boshida kelsa ham ushlab qoladiganlar
     "dalbayob", "dalba", "suka", "blyat", "naxuy", "pidar", "gandon", 
     "haromi", "qanjiq", "jalab", "qotog", "ambal", "haqorat"
 }
@@ -226,17 +225,14 @@ local function containsBadWord(text)
     end
     local lower_text = text:lower()
     
-    -- Barcha belgilarni va probellarni tozalab, so'zlarni xavfsiz ajratamiz
     local clean_text = " " .. lower_text:gsub("[%p%c]", " ") .. " "
     
-    -- 1. Aniq butun so'z bo'yicha qidiruv
     for _, bw in ipairs(exact_bad_words) do
         if clean_text:find(" " .. bw .. " ", 1, true) then
             return true
         end
     end
     
-    -- 2. So'zning boshlanishiga qarab qidiruv
     for _, bw in ipairs(partial_bad_words) do
         if clean_text:find(" " .. bw, 1, true) then
             return true
@@ -1099,7 +1095,27 @@ function telegramPolling()
                                 tg_capture_timer = os.clock() + 3.0
                                 
                             elseif low == "!cmd" then
-                                sendTG("*MENYU (v" .. tostring(script_version) .. ")*\n\n`/stats` - Hisobot\n`!spec [id]` - O'yinchini kuzatish\n`!stats [id]` - O'yinchi statisikasi\n`!delay [sekund]` - Javob vaqtini o'zgartirish\n`!pause` - Cheksiz uxlash\n`!unpause` - Qayta ishlash\n`!pause [daq]` - Vaqtli uxlash\n`!a [matn]` - Admin chat\n`!status` - Bot holati")
+                                sendTG("*MENYU (v" .. tostring(script_version) .. ")*\n\n`/stats` - Hisobot\n`!admins` - Onlayn adminlar\n`!spec [id]` - O'yinchini kuzatish\n`!stats [id]` - O'yinchi statisikasi\n`!delay [sekund]` - Javob vaqtini o'zgartirish\n`!pause` - Cheksiz uxlash\n`!unpause` - Qayta ishlash\n`!pause [daq]` - Vaqtli uxlash\n`!a [matn]` - Admin chat\n`!status` - Bot holati")
+                                
+                            elseif low == "!admins" then
+                                checking_admins = true
+                                online_admins_table = {}
+                                sendInput("/admins")
+                                sendTG("⏳ *Adminlar ro'yxati tekshirilmoqda...*")
+                                
+                                newTask(function()
+                                    wait(3000)
+                                    checking_admins = false
+                                    if #online_admins_table > 0 then
+                                        local msg = "👥 *Onlayn Adminlar:*\n"
+                                        for _, a in ipairs(online_admins_table) do
+                                            msg = msg .. "▪️ `" .. a.name .. "` [" .. a.id .. "] - " .. a.lvl .. " lvl\n"
+                                        end
+                                        sendTG(msg)
+                                    else
+                                        sendTG("Hozircha serverda onlayn adminlar yo'q yoki ro'yxat olinmadi.")
+                                    end
+                                end)
                                 
                             elseif txt:match("^!delay%s+(%d+)") then
                                 local new_delay = tonumber(txt:match("^!delay%s+(%d+)"))
@@ -1731,8 +1747,25 @@ function onLoad()
 
                         if #old_admins_table > 0 then 
                             if #joined > 0 then
-                                sendTG("🟢 *Admin kirdi:* `" .. tgSafe(table.concat(joined, ", ")) .. "`", true)
+                                local norm_joined = {}
+                                local high_joined = {}
+                                
+                                for _, name in ipairs(joined) do
+                                    if red_admins[name] then
+                                        table.insert(high_joined, name)
+                                    else
+                                        table.insert(norm_joined, name)
+                                    end
+                                end
+                                
+                                if #high_joined > 0 then
+                                    sendTG("🚨 *DIQQAT! Yuqori admin o'yinga kirdi:* `" .. tgSafe(table.concat(high_joined, ", ")) .. "`", true)
+                                end
+                                if #norm_joined > 0 then
+                                    sendTG("🟢 *Admin kirdi:* `" .. tgSafe(table.concat(norm_joined, ", ")) .. "`", true)
+                                end
                             end
+                            
                             if #left > 0 then
                                 sendTG("🔴 *Admin chiqdi:* `" .. tgSafe(table.concat(left, ", ")) .. "`", true)
                             end
