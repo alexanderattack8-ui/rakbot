@@ -4,7 +4,7 @@
     {
       "path": "admin.lua",
       "target": "scripts\\\\admin.lua",
-      "version": 6.9,
+      "version": 7.0,
       "type": "lua",
       "min_size": 5000,
       "sha256": ""
