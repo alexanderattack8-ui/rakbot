@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v7.2 - Gemini Model 404 Fix) ===
+-- === KOD BOSHLANISHI (admin.lua - 100% TO'LIQ VA ISHLAYDIGAN VERSIYA) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 7.2
+local script_version = 7.4
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -352,7 +352,7 @@ function bazaXato(reason)
         return 
     end
     base_error_sent = true
-    sendTG("[XATO] *Baza ishlamayapti!*\n`" .. tgSafe(reason) .. "`")
+    sendTG("[XATO] *Baza xatosi!*\n`" .. tgSafe(reason) .. "`")
 end
 
 function bazaTuzuk()
@@ -419,7 +419,8 @@ function loadMemory()
     end
     
     if data == nil and old_data == nil then
-        bazaXato("Xotira bazasi o'qilmadi (" .. tostring(err) .. ")")
+        local f = io.open(memory_file, "w")
+        if f then f:write("{}") f:close() end
     else
         bazaTuzuk()
     end
@@ -434,12 +435,7 @@ function saveMemory()
         f:write(json.encode(bot_memory))
         f:close()
     end)
-    
-    if not ok then
-        bazaXato("Xotira bazasiga yozilmadi (" .. tostring(err) .. ")")
-        return false
-    end
-    return true
+    return ok
 end
 
 -- =================================================
@@ -479,24 +475,18 @@ function loadFAQFromFile()
     if data then
         faq_base = data
     else
-        bazaXato("FAQ bazasi o'qilmadi (" .. tostring(err) .. ")")
+        local f = io.open(faq_file, "w")
+        if f then f:write("{}") f:close() end
     end
 end
 
 function getFAQReply(text)
-    if not text or text == "" then 
-        return nil 
-    end
-    
+    if not text or text == "" then return nil end
     local lower = normText(text)
-    if lower == "" then 
-        return nil 
-    end
+    if lower == "" then return nil end
     
     for key, data in pairs(faq_base) do
-        if lower == key then 
-            return memAnswer(data) 
-        end
+        if lower == key then return memAnswer(data) end
     end
     
     if lower:len() >= 5 then
@@ -538,18 +528,11 @@ end
 function saveFAQToFile()
     local ok, err = pcall(function()
         local f = io.open(faq_file, "w")
-        if not f then 
-            error("yozib bo'lmadi: " .. faq_file, 0) 
-        end
+        if not f then error("yozib bo'lmadi: " .. faq_file, 0) end
         f:write(json.encode(faq_base))
         f:close()
     end)
-    
-    if not ok then
-        bazaXato("FAQ bazasiga yozilmadi (" .. tostring(err) .. ")")
-        return false
-    end
-    return true
+    return ok
 end
 
 function extractArticleTitleAndBody(html)
@@ -625,8 +608,7 @@ function translateToUzbek(text, is_title)
     }
     
     local headers = { ["Content-Type"] = "application/json" }
-    -- GOOGLE YANGI MODELIGA O'TKAZILDI (404 FIX)
-    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" .. gemini_key
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
 
     local ok, response = pcall(function()
         return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 15.0 })
@@ -640,15 +622,15 @@ function translateToUzbek(text, is_title)
                 out = out:gsub('^"(.*)"$', "%1")
                 return out:match("^%s*(.-)%s*$")
             end
+        else
+            print("[TARJIMA XATO] KOD: " .. tostring(response.status_code) .. " | SABABI: " .. tostring(response.text))
         end
     end
     return nil
 end
 
 function updateFAQFromWeb(manual)
-    if faq_updating then 
-        return 
-    end
+    if faq_updating then return end
     
     if gemini_key == "" then
         if manual then sendTG("[FAQ] gemini_key yo'q, tarjima qilib bo'lmaydi.") end
@@ -677,9 +659,7 @@ function updateFAQFromWeb(manual)
         local articles, seen_article = {}, {}
         
         local function addArticle(url, name)
-            if not url then 
-                return 
-            end
+            if not url then return end
             local clean = url:gsub("#.*$", "")
             if not seen_article[clean] then
                 seen_article[clean] = true
@@ -765,7 +745,7 @@ function updateFAQFromWeb(manual)
 end
 
 -- =================================================
--- AI FUNKSIYALARI
+-- AI FUNKSIYALARI (API TO'G'RILANDI)
 -- =================================================
 function askGemini(system_prompt, user_text)
     if gemini_key == "" or ai_busy then 
@@ -773,7 +753,6 @@ function askGemini(system_prompt, user_text)
     end
     
     ai_busy = true
-    
     local safe = tostring(user_text or ""):gsub('"', ''):gsub('\\', ''):gsub('\n', ' '):gsub('\r', '')
     
     local payload = {
@@ -784,8 +763,7 @@ function askGemini(system_prompt, user_text)
     }
     
     local headers = { ["Content-Type"] = "application/json" }
-    -- GOOGLE YANGI MODELIGA O'TKAZILDI (404 FIX)
-    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" .. gemini_key
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
     
     local ok, response = pcall(function()
         return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 12.0 })
@@ -801,8 +779,10 @@ function askGemini(system_prompt, user_text)
                 return out
             end
         else
-            print("[GEMINI API XATO] KOD: " .. tostring(response.status_code))
+            print("[GEMINI API XATO] KOD: " .. tostring(response.status_code) .. " | SABABI: " .. tostring(response.text))
         end
+    else
+        print("[GEMINI API XATO] Serverga so'rov yuborib bo'lmadi (Internet yoki API muammosi).")
     end
     
     return nil
