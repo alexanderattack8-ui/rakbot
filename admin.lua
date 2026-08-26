@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua - 100% TO'LIQ VA ISHLAYDIGAN VERSIYA) ===
+-- === KOD BOSHLANISHI (admin.lua v7.5 - 100% TO'LIQ VA ISHLAYDIGAN VERSIYA) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 7.4
+local script_version = 7.5
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -623,7 +623,7 @@ function translateToUzbek(text, is_title)
                 return out:match("^%s*(.-)%s*$")
             end
         else
-            print("[TARJIMA XATO] KOD: " .. tostring(response.status_code) .. " | SABABI: " .. tostring(response.text))
+            print("[TARJIMA XATO] " .. tostring(response.status_code) .. " | SABAB: " .. tostring(response.text))
         end
     end
     return nil
@@ -745,7 +745,7 @@ function updateFAQFromWeb(manual)
 end
 
 -- =================================================
--- AI FUNKSIYALARI (API TO'G'RILANDI)
+-- AI FUNKSIYALARI (MANZIL TO'LIQ YANGILANDI - v7.5)
 -- =================================================
 function askGemini(system_prompt, user_text)
     if gemini_key == "" or ai_busy then 
@@ -763,6 +763,8 @@ function askGemini(system_prompt, user_text)
     }
     
     local headers = { ["Content-Type"] = "application/json" }
+    
+    -- V1BETA ga almashtirildi va xato kodi formatlandi
     local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
     
     local ok, response = pcall(function()
@@ -779,10 +781,11 @@ function askGemini(system_prompt, user_text)
                 return out
             end
         else
-            print("[GEMINI API XATO] KOD: " .. tostring(response.status_code) .. " | SABABI: " .. tostring(response.text))
+            -- AGAR YANA XATO QILSA, ENDI KONSOLDA SABABI KO'RINADI
+            print("[AI XATO] KOD: " .. tostring(response.status_code) .. " | SABAB: " .. tostring(response.text))
         end
     else
-        print("[GEMINI API XATO] Serverga so'rov yuborib bo'lmadi (Internet yoki API muammosi).")
+        print("[AI XATO] Internet yoki API tarmog'i bilan ulanib bo'lmadi.")
     end
     
     return nil
