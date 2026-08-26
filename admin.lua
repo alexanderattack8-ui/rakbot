@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v7.1 - Gemini 404 API Fix) ===
+-- === KOD BOSHLANISHI (admin.lua v7.2 - Gemini Model 404 Fix) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 7.1
+local script_version = 7.2
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -625,8 +625,8 @@ function translateToUzbek(text, is_title)
     }
     
     local headers = { ["Content-Type"] = "application/json" }
-    -- API MANZILI YANGILANDI (404 FIX)
-    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" .. gemini_key
+    -- GOOGLE YANGI MODELIGA O'TKAZILDI (404 FIX)
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" .. gemini_key
 
     local ok, response = pcall(function()
         return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 15.0 })
@@ -784,8 +784,8 @@ function askGemini(system_prompt, user_text)
     }
     
     local headers = { ["Content-Type"] = "application/json" }
-    -- API MANZILI YANGILANDI (404 FIX)
-    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" .. gemini_key
+    -- GOOGLE YANGI MODELIGA O'TKAZILDI (404 FIX)
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" .. gemini_key
     
     local ok, response = pcall(function()
         return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 12.0 })
