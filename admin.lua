@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v6.7 - Anti-AFK, Stats, Spec & Admin Logs) ===
+-- === KOD BOSHLANISHI (admin.lua v6.9 - Smart Swear Filter) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 6.7
+local script_version = 6.9
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -47,6 +47,7 @@ local cfg = ini.load({
         chatid = "",
         password = "",
         gemini_key = "",
+        report_delay = "12",
     },
     daily_logs = {
         start_time = os.time()
@@ -60,6 +61,7 @@ local bot_name = tostring(cfg.settings.bot_name):match("^%s*(.-)%s*$") or ""
 local bot_token = tostring(cfg.settings.token):match("^%s*(.-)%s*$") or ""
 local bot_chatid = tostring(cfg.settings.chatid):match("^%s*(.-)%s*$") or ""
 local gemini_key = tostring(cfg.settings.gemini_key):match("^%s*(.-)%s*$") or ""
+local report_delay = tonumber(cfg.settings.report_delay) or 12
 
 -- ================= LITSENZIYA =================
 local license_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/licenses.txt"
@@ -203,25 +205,44 @@ local faq_sections = {
     { name = "Yordam markazi", url = "https://support.grnd.gg/ru/" }
 }
 
--- ================= SO'KINISHLAR LUG'ATI (FIXED) =================
-local bad_words_dict = {
-    "skn", "jlb", "dalba", "haqorat", "kot", "qoto", "jala", "skay",
-    "suka", "blyat", "naxuy", "pidar", "chort", "gandon", "haromi",
-    "sik", "dalbayob", "ambal", "qanjiq", "jalab", "qotog", "%Wam%W"
+-- ================= SO'KINISHLAR LUG'ATI (YANGILANGAN) =================
+local exact_bad_words = {
+    -- Faqat alohida so'z bo'lgandagina ushlash uchun (Yordam kabi so'zlarda adashmaydi)
+    "am", "ami", "amiga", "amini", "aminga", "amingni", "aming", "amlar",
+    "kot", "koti", "kotiga", "kotini", "kotinga", "kotingni", "koting", "kotlar",
+    "sik", "sikay", "sikaman", "sikamiz", "sikdi", "sikib", "sikiw", "sikish",
+    "jlb", "skn", "jala", "chort", "qoto", "skay"
+}
+
+local partial_bad_words = {
+    -- So'zning boshida kelsa ham ushlab qoladiganlar
+    "dalbayob", "dalba", "suka", "blyat", "naxuy", "pidar", "gandon", 
+    "haromi", "qanjiq", "jalab", "qotog", "ambal", "haqorat"
 }
 
 local function containsBadWord(text)
     if not text then 
         return false 
     end
-    -- Xatoni oldini olish uchun matn chetlariga bo'sh joy qo'shamiz
-    local lower_text = " " .. text:lower() .. " "
+    local lower_text = text:lower()
     
-    for _, bw in ipairs(bad_words_dict) do
-        if lower_text:find(bw) then
+    -- Barcha belgilarni va probellarni tozalab, so'zlarni xavfsiz ajratamiz
+    local clean_text = " " .. lower_text:gsub("[%p%c]", " ") .. " "
+    
+    -- 1. Aniq butun so'z bo'yicha qidiruv
+    for _, bw in ipairs(exact_bad_words) do
+        if clean_text:find(" " .. bw .. " ", 1, true) then
             return true
         end
     end
+    
+    -- 2. So'zning boshlanishiga qarab qidiruv
+    for _, bw in ipairs(partial_bad_words) do
+        if clean_text:find(" " .. bw, 1, true) then
+            return true
+        end
+    end
+    
     return false
 end
 
@@ -1072,14 +1093,22 @@ function telegramPolling()
                             local txt = update.message.text
                             local low = txt:lower()
 
-                            -- O'yinga to'g'ridan-to'g'ri / komandani uzatish
                             if txt:match("^/[%w_]+") and low ~= "/stats" then
                                 sendInput(txt)
                                 sendTG("[TG] Buyruq yuborildi:\n`" .. tgSafe(txt) .. "`")
                                 tg_capture_timer = os.clock() + 3.0
                                 
                             elseif low == "!cmd" then
-                                sendTG("*MENYU (v" .. tostring(script_version) .. ")*\n\n`/stats` - Hisobot\n`!spec [id]` - O'yinchini kuzatish\n`!stats [id]` - O'yinchi statisikasi\n`!pause` - Cheksiz uxlash\n`!unpause` - Qayta ishlash\n`!pause [daq]` - Vaqtli uxlash\n`!a [matn]` - Admin chat\n`!status` - Bot holati\n\n_Boshqa istalgan / buyruq to'g'ridan-to'g'ri o'yinga yuboriladi._")
+                                sendTG("*MENYU (v" .. tostring(script_version) .. ")*\n\n`/stats` - Hisobot\n`!spec [id]` - O'yinchini kuzatish\n`!stats [id]` - O'yinchi statisikasi\n`!delay [sekund]` - Javob vaqtini o'zgartirish\n`!pause` - Cheksiz uxlash\n`!unpause` - Qayta ishlash\n`!pause [daq]` - Vaqtli uxlash\n`!a [matn]` - Admin chat\n`!status` - Bot holati")
+                                
+                            elseif txt:match("^!delay%s+(%d+)") then
+                                local new_delay = tonumber(txt:match("^!delay%s+(%d+)"))
+                                if new_delay and new_delay >= 0 then
+                                    report_delay = new_delay
+                                    cfg.settings.report_delay = tostring(report_delay)
+                                    pcall(function() ini.save(cfg, "settings\\config.txt") end)
+                                    sendTG("⏱ *Botning report kutish vaqti o'zgartirildi:* `" .. report_delay .. "` soniya.")
+                                end
                                 
                             elseif txt:match("^!spec%s+(%d+)") then
                                 local spid = txt:match("^!spec%s+(%d+)")
@@ -1148,7 +1177,7 @@ function telegramPolling()
                                 
                             elseif low == "!status" then
                                 local idle = os.time() - last_activity
-                                sendTG("*Bot Holati (v" .. tostring(script_version) .. "):*\nSP: " .. (is_spectating and "Ha" or "Yo'q") .. "\nYurmoqda: " .. (is_wandering and "Ha" or "Yo'q") .. "\nOxirgi harakat: `" .. idle .. "` soniya oldin\nAI: " .. (ai_busy and "Band" or "Tayyor") .. "\nPauza holati: " .. (is_paused and "To'xtatilgan" or "Ishlamoqda"))
+                                sendTG("*Bot Holati (v" .. tostring(script_version) .. "):*\nSP: " .. (is_spectating and "Ha" or "Yo'q") .. "\nYurmoqda: " .. (is_wandering and "Ha" or "Yo'q") .. "\nOxirgi harakat: `" .. idle .. "` soniya oldin\nAI: " .. (ai_busy and "Band" or "Tayyor") .. "\nPauza holati: " .. (is_paused and "To'xtatilgan" or "Ishlamoqda") .. "\nKutish vaqti: `" .. report_delay .. "`s")
                             end
                         end
                     end
@@ -1159,7 +1188,7 @@ function telegramPolling()
 end
 
 -- =================================================
--- SAMP EVENTLAR (ANTI-AFK FIX)
+-- SAMP EVENTLAR
 -- =================================================
 function sampev.onSendPlayerSync(data)
     if license_stopped or is_hiding or is_paused then 
@@ -1169,11 +1198,7 @@ function sampev.onSendPlayerSync(data)
     if is_wandering then
         last_activity = os.time()
         
-        -- YURGANDA ANTI-AFK UCHUN KLAVISH BOSISHLAR:
-        -- Bazi hollarda sakrash (keysData = 2), ba'zida faqat yurish (1)
         data.keysData = (math.random(1, 10) > 8) and 2 or 1
-        
-        -- W, A, S, D tugmalarini bosib qo'yib yuborish (Anti-AFK kafolati 100%)
         data.leftRightKeys = (math.random(1, 3) == 1) and 128 or ((math.random(1, 3) == 2) and -128 or 0)
         data.upDownKeys = (math.random(1, 3) == 1) and 128 or ((math.random(1, 3) == 2) and -128 or 0)
         
@@ -1217,7 +1242,6 @@ function sampev.onServerMessage(color, text)
         end
     end
     
-    -- TELEGRAM STATS USHLASH (Agar chatda yozilsa)
     if checking_stats_for_tg and (clean:find("Daraja:") or clean:find("Level:") or clean:find("Hisob:") or clean:find("Ism:")) then
         sendTG("📊 *Statistika:*\n`" .. tgSafe(clean) .. "`")
         newTask(function() wait(2000) checking_stats_for_tg = false end)
@@ -1254,9 +1278,6 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- =================================================
-    -- BOSHQA ADMIN FORMANI QABUL QILGANINI TEKSHIRISH
-    -- =================================================
     local adm_chat_name, adm_chat_text = clean:match("<ADM>.-(%a+_%a+)%[%d+%]:%s*(.+)")
     if not adm_chat_name then
         adm_chat_name, adm_chat_text = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(.+)")
@@ -1292,9 +1313,6 @@ function sampev.onServerMessage(color, text)
         pending_admin_mirrors[punished_id].cancelled = true
     end
 
-    -- =================================================
-    -- FORMANI USHLASH
-    -- =================================================
     local a_name, a_cmd, a_args = clean:match("<ADM>%s*%(%d+%)%s*(%a+_%a+)%[%d+%]:%s*(/[%w]+)%s+(.+)")
     if not a_name then 
         a_name, a_cmd, a_args = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(/[%w]+)%s+(.+)") 
@@ -1333,9 +1351,6 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- =================================================
-    -- ADMIN CHAT AI QISMI
-    -- =================================================
     if adm_chat_name and adm_chat_text and adm_chat_name ~= bot_name and not red_admins[adm_chat_name] then
         local first_word = adm_chat_text:lower():match("^(%S+)") or ""
         
@@ -1390,9 +1405,6 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- =================================================
-    -- BOSHQALAR JAVOBIDAN O'RGANISH (MEM_BASE)
-    -- =================================================
     local tid, ans = clean:match("<ADM>.-%[%d+%]%s+.-%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)")
     if not tid then 
         tid, ans = clean:match("%[A%].-%[%d+%]%s+%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)") 
@@ -1416,7 +1428,6 @@ function sampev.onServerMessage(color, text)
             local is_bot_ans = (ans_admin == bot_name)
             local is_red_ans = (ans_admin and red_admins[ans_admin])
 
-            -- Boshqa adminlarning yozganini o'rganish xotirasi (HALIYAM ISHLAYDI)
             if not is_bot_ans then
                 local savol = normText(pend.text)
                 local javob = ans:gsub("https?://[%S]+", ""):gsub("%s+", " "):match("^%s*(.-)%s*$") or ans
@@ -1435,28 +1446,14 @@ function sampev.onServerMessage(color, text)
                     saveMemory()
                 end
             end
-
-            -- Boshqa odam javob bergan bo'lsa, bot javob yozishni bekor qiladi
-            if is_red_ans then
-                for i = #report_queue, 1, -1 do
-                    if tostring(report_queue[i].id) == tid then 
-                        table.remove(report_queue, i) 
-                    end
-                end
-            end
             
-            pending_reports[tid] = nil
+            pending_reports[tid] = nil 
         end
     end
 
     local closed_id = clean:match("Report%s+#?(%d+)%s+yopildi") or clean:match("%[(%d+)%]%s+report.*yopildi") or clean:match("^/re%s+(%d+)$")
     if closed_id then
         closed_id = tostring(closed_id)
-        for i = #report_queue, 1, -1 do
-            if tostring(report_queue[i].id) == closed_id then 
-                table.remove(report_queue, i) 
-            end
-        end
         pending_reports[closed_id] = nil
     end
 
@@ -1481,7 +1478,6 @@ function sampev.onServerMessage(color, text)
             prunePending()
             pending_reports[rep_id] = { text = rep_text, time = os.time() }
             
-            -- TELEGRAMGA OVOZLI BILDIRISHNOMA (Notification)
             sendTG("🔔 *YANGI REPORT KELDI!*\n👤 O'yinchi: `" .. tgSafe(rep_name) .. "` (ID: " .. rep_id .. ")\n💬 Matn: `" .. tgSafe(rep_text) .. "`")
 
             local lower_rep = rep_text:lower():match("^%s*(.-)%s*$") or ""
@@ -1497,7 +1493,6 @@ function sampev.onServerMessage(color, text)
                 newTask(function()
                     if is_mp_active then
                         wait(math.random(4000, 7000))
-                        if not pending_reports[q_id] then return end
                         table.insert(report_queue, { id = q_id, reply = "Assalomu aleykum, iltimos kuting.", name = q_name, text = q_text })
                         return
                     end
@@ -1506,33 +1501,18 @@ function sampev.onServerMessage(color, text)
 
                     if is_flipped then
                         wait(math.random(1500, 3000))
-                        if not pending_reports[q_id] then return end
-                        
                         sendInput("/flip " .. q_id)
                         final_reply = "Assalomu alaykum, mashinangizni to'g'rilab qo'ydim. Ehtiyotkorroq haydang."
                         
                     elseif is_bad then
                         local text_len = string.len(q_text)
                         wait(math.random(2000, 4000) + (text_len * 20))
-                        if not pending_reports[q_id] then return end
-                        
                         final_reply = "Assalomu alaykum, server qoidalarini buzmang."
                         sendTG("⚠️ *DIQQAT! So'kinish ushlandi:*\n👤 O'yinchi: `" .. tgSafe(q_name) .. "`\n💬 Matn: `" .. tgSafe(q_text) .. "`", true)
                         
                     else
-                        local text_len = string.len(q_text)
-                        local dynamic_delay = math.random(25000, 40000) + (text_len * 50)
+                        wait(report_delay * 1000)
                         
-                        if dynamic_delay > 55000 then 
-                            dynamic_delay = math.random(45000, 55000) 
-                        end
-                        
-                        wait(dynamic_delay)
-                        
-                        if not pending_reports[q_id] then 
-                            return 
-                        end
-
                         final_reply = getSmartReply(q_text, q_name)
                         
                         if not final_reply then
@@ -1598,7 +1578,6 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
     last_dialog_id = id
     last_dialog_time = os.clock()
     
-    -- TELEGRAM STATS USHLASH (Agar Dialog bo'lsa)
     if checking_stats_for_tg then
         sendTG("📊 *Statistika (ID: " .. id .. "):*\n`" .. tgSafe(clean_text) .. "`")
         checking_stats_for_tg = false
@@ -1720,7 +1699,6 @@ function onLoad()
             wait(1000)
             tick = tick + 1
             
-            -- ADMINLAR KIRIB/CHIQISHINI TEKSHIRISH (Har 2 daqiqada - 120 soniya)
             if tick % 120 == 0 and is_logged_in and not is_paused then
                 checking_admins_auto = true
                 online_admins_table = {}
