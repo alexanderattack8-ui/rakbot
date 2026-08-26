@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v7.7 - 100% TO'LIQ, GEMINI 3.6 FLASH MODELI) ===
+-- === KOD BOSHLANISHI (admin.lua v8.1 - 100% TO'LIQ FORMAT VA AZ PATRUL) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 7.7
+local script_version = 8.1
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -62,6 +62,14 @@ local bot_token = tostring(cfg.settings.token):match("^%s*(.-)%s*$") or ""
 local bot_chatid = tostring(cfg.settings.chatid):match("^%s*(.-)%s*$") or ""
 local gemini_key = tostring(cfg.settings.gemini_key):match("^%s*(.-)%s*$") or ""
 local report_delay = tonumber(cfg.settings.report_delay) or 12
+
+-- ================= AZ ZONE KOORDINATALARI =================
+-- Siz bergan 4 ta burchak koordinatalari (kenglik va uzunlik)
+local az_min_x = -745.7576
+local az_max_x = -696.5170
+local az_min_y = -2460.6765
+local az_max_y = -2411.3794
+local az_z = 1198.1488
 
 -- ================= LITSENZIYA =================
 local license_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/licenses.txt"
@@ -155,12 +163,16 @@ local pending_admin_mirrors = {}
 local is_spectating = false
 local sp_timer = 0
 local is_wandering = false
-local wander_timer = 0
 local last_activity = os.time()
+
+-- Odam harakati o'zgaruvchilari (Smart Movement)
+local az_target_x = 0
+local az_target_y = 0
+local bot_state = "idle" 
+local state_timer = 0
 local angle = 0
-local center_x = 0
-local center_y = 0
-local current_speed = 0.05
+local current_speed = 0
+
 local is_hiding = false
 local sleep_end_time = 0
 local is_paused = false 
@@ -208,15 +220,52 @@ local faq_sections = {
 
 -- ================= SO'KINISHLAR LUG'ATI =================
 local exact_bad_words = {
-    "am", "ami", "amiga", "amini", "aminga", "amingni", "aming", "amlar",
-    "kot", "koti", "kotiga", "kotini", "kotinga", "kotingni", "koting", "kotlar",
-    "sik", "sikay", "sikaman", "sikamiz", "sikdi", "sikib", "sikiw", "sikish",
-    "jlb", "skn", "jala", "chort", "qoto", "skay"
+    "am", 
+    "ami", 
+    "amiga", 
+    "amini", 
+    "aminga", 
+    "amingni", 
+    "aming", 
+    "amlar",
+    "kot", 
+    "koti", 
+    "kotiga", 
+    "kotini", 
+    "kotinga", 
+    "kotingni", 
+    "koting", 
+    "kotlar",
+    "sik", 
+    "sikay", 
+    "sikaman", 
+    "sikamiz", 
+    "sikdi", 
+    "sikib", 
+    "sikiw", 
+    "sikish",
+    "jlb", 
+    "skn", 
+    "jala", 
+    "chort", 
+    "qoto", 
+    "skay"
 }
 
 local partial_bad_words = {
-    "dalbayob", "dalba", "suka", "blyat", "naxuy", "pidar", "gandon", 
-    "haromi", "qanjiq", "jalab", "qotog", "ambal", "haqorat"
+    "dalbayob", 
+    "dalba", 
+    "suka", 
+    "blyat", 
+    "naxuy", 
+    "pidar", 
+    "gandon", 
+    "haromi", 
+    "qanjiq", 
+    "jalab", 
+    "qotog", 
+    "ambal", 
+    "haqorat"
 }
 
 local function containsBadWord(text)
@@ -270,18 +319,35 @@ local auto_replies = {
 
 -- ================= RUXSAT ETILGAN BUYRUQLAR =================
 local allowed_cmds = {
-    ["/ban"] = true, ["/offban"] = true, ["/warn"] = true, ["/offwarn"] = true,
-    ["/kick"] = true, ["/mute"] = true, ["/rmute"] = true, ["/offmute"] = true,
-    ["/unmute"] = true, ["/offunmute"] = true, ["/jail"] = true, ["/unjail"] = true,
-    ["/freeze"] = true, ["/unfreeze"] = true, ["/slap"] = true, ["/slay"] = true,
-    ["/spec"] = true, ["/unspec"] = true, ["/setworld"] = true, ["/goto"] = true,
-    ["/gethere"] = true, ["/bring"] = true, ["/akick"] = true, ["/aban"] = true,
-    ["/amute"] = true, ["/awarn"] = true
+    ["/ban"] = true, 
+    ["/offban"] = true, 
+    ["/warn"] = true, 
+    ["/offwarn"] = true,
+    ["/kick"] = true, 
+    ["/mute"] = true, 
+    ["/rmute"] = true, 
+    ["/offmute"] = true,
+    ["/unmute"] = true, 
+    ["/offunmute"] = true, 
+    ["/jail"] = true, 
+    ["/unjail"] = true,
+    ["/freeze"] = true, 
+    ["/unfreeze"] = true, 
+    ["/slap"] = true, 
+    ["/slay"] = true,
+    ["/spec"] = true, 
+    ["/unspec"] = true, 
+    ["/setworld"] = true, 
+    ["/goto"] = true,
+    ["/gethere"] = true, 
+    ["/bring"] = true, 
+    ["/akick"] = true, 
+    ["/aban"] = true,
+    ["/amute"] = true, 
+    ["/awarn"] = true
 }
 
--- =================================================
--- YORDAMCHI FUNKSIYALAR
--- =================================================
+-- ================= YORDAMCHI FUNKSIYALAR =================
 local function normText(s)
     local t = tostring(s or ""):lower():gsub("[%p%c]", " "):gsub("%s+", " ")
     return t:match("^%s*(.-)%s*$") or ""
@@ -316,24 +382,6 @@ function isRPNick(name)
     return string.match(name, "^%u%a+_%u%a+$") ~= nil
 end
 
-function startWandering()
-    local bx, by, bz = getBotPosition()
-    if bx then
-        center_x = bx
-        center_y = by
-    end
-    angle = math.random() * math.pi * 2
-    current_speed = 0.05
-    is_wandering = true
-    is_spectating = false
-    last_activity = os.time()
-    wander_timer = os.time()
-end
-
-function stopWandering()
-    is_wandering = false
-end
-
 local function prunePending()
     local now = os.time()
     for k, v in pairs(pending_reports) do
@@ -343,9 +391,32 @@ local function prunePending()
     end
 end
 
--- =================================================
--- XOTIRA FUNKSIYALARI
--- =================================================
+-- ================= AZ PATRUL (SMART MOVEMENT) =================
+function getNewAZTarget()
+    -- Berilgan 4 burchak ichidan doim tasodifiy (random) joy tanlaydi
+    az_target_x = math.random() * (az_max_x - az_min_x) + az_min_x
+    az_target_y = math.random() * (az_max_y - az_min_y) + az_min_y
+end
+
+function startWandering()
+    getNewAZTarget()
+    bot_state = "run"
+    is_wandering = true
+    is_spectating = false
+    last_activity = os.time()
+    state_timer = os.time() + math.random(3, 8)
+end
+
+function stopWandering()
+    is_wandering = false
+    bot_state = "idle"
+end
+
+local function getDistance(x1, y1, x2, y2)
+    return math.sqrt((x2 - x1)^2 + (y2 - y1)^2)
+end
+
+-- ================= XOTIRA FUNKSIYALARI =================
 function bazaXato(reason)
     base_ok = false
     if base_error_sent then 
@@ -438,9 +509,7 @@ function saveMemory()
     return ok
 end
 
--- =================================================
--- FAQ FUNKSIYALARI
--- =================================================
+-- ================= FAQ FUNKSIYALARI =================
 function stripHTML(html)
     if not html then 
         return "" 
@@ -608,7 +677,7 @@ function translateToUzbek(text, is_title)
     }
     
     local headers = { ["Content-Type"] = "application/json" }
-    -- GEMINI 3.6 FLASH MODELI ISHLATILDI
+    
     local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" .. gemini_key
 
     local ok, response = pcall(function()
@@ -745,9 +814,7 @@ function updateFAQFromWeb(manual)
     end)
 end
 
--- =================================================
--- AI FUNKSIYALARI (MANZIL TO'LIQ YANGILANDI - v7.7)
--- =================================================
+-- ================= AI FUNKSIYALARI =================
 function askGemini(system_prompt, user_text)
     if gemini_key == "" or ai_busy then 
         return nil 
@@ -765,7 +832,6 @@ function askGemini(system_prompt, user_text)
     
     local headers = { ["Content-Type"] = "application/json" }
     
-    -- GEMINI 3.6 FLASH MODELI ISHLATILDI
     local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" .. gemini_key
     
     local ok, response = pcall(function()
@@ -808,9 +874,7 @@ function getAIChatReply(text, chat_type)
     return askGemini(prompt, text)
 end
 
--- =================================================
--- AQLLI JAVOB TIZIMI
--- =================================================
+-- ================= AQLLI JAVOB TIZIMI =================
 function getSmartReply(text, sender_name)
     if not text or text == "" then 
         return nil 
@@ -948,9 +1012,7 @@ function getFallbackReply(rep_text)
     end
 end
 
--- =================================================
--- TELEGRAM FUNKSIYALARI
--- =================================================
+-- ================= TELEGRAM FUNKSIYALARI =================
 local tg_recent = {}
 local TG_DEDUPE = 90
 
@@ -1006,44 +1068,6 @@ function checkUpdates()
     end)
 end
 
--- =================================================
--- SP FUNKSIYASI
--- =================================================
-function spectateRandomPlayer()
-    local players = {}
-    for i = 0, 500 do
-        if i ~= getBotId() then
-            local ok, name = pcall(getPlayerName, i)
-            if ok and type(name) == "string" and name ~= "" and name ~= "Unknown" then
-                local is_admin = false
-                if red_admins[name] then 
-                    is_admin = true 
-                end
-                for _, adm in ipairs(online_admins_table) do
-                    if tonumber(adm.id) == i or adm.name == name then 
-                        is_admin = true
-                        break 
-                    end
-                end
-                if not is_admin then 
-                    table.insert(players, i) 
-                end
-            end
-        end
-    end
-    
-    local target = (#players > 0) and players[math.random(1, #players)] or math.random(1, 50)
-    sendInput("/sp " .. target)
-    
-    is_spectating = true
-    sp_timer = os.time()
-    last_activity = os.time()
-    stopWandering()
-end
-
--- =================================================
--- TELEGRAM POLLING
--- =================================================
 function telegramPolling()
     if bot_token == "" or bot_chatid == "" then 
         return 
@@ -1116,7 +1140,6 @@ function telegramPolling()
                                 sendInput("/sp " .. spid)
                                 is_spectating = true
                                 sp_timer = os.time()
-                                last_activity = os.time()
                                 stopWandering()
                                 sendTG("👁 `" .. spid .. "` ID kuzatuvga olindi (Spec).")
                                 
@@ -1188,9 +1211,7 @@ function telegramPolling()
     end)
 end
 
--- =================================================
--- SAMP EVENTLAR
--- =================================================
+-- ================= O'YIN ICHIDAGI SINKRONIZATSIYA (AZ PATRUL) =================
 function sampev.onSendPlayerSync(data)
     if license_stopped or is_hiding or is_paused then 
         return false 
@@ -1199,30 +1220,67 @@ function sampev.onSendPlayerSync(data)
     if is_wandering then
         last_activity = os.time()
         
-        data.keysData = (math.random(1, 10) > 8) and 2 or 1
-        data.leftRightKeys = (math.random(1, 3) == 1) and 128 or ((math.random(1, 3) == 2) and -128 or 0)
-        data.upDownKeys = (math.random(1, 3) == 1) and 128 or ((math.random(1, 3) == 2) and -128 or 0)
-        
-        if math.random(1, 100) > 95 then
-            current_speed = (current_speed == 0.05) and 0.15 or 0.05
-            angle = angle + (math.random() - 0.5)
+        local bx, by, bz = getBotPosition()
+        if not bx then 
+            return { data } 
         end
         
-        local bx, by, bz = getBotPosition()
-        if bx then
-            local dist = math.sqrt((bx - center_x)^2 + (by - center_y)^2)
-            if dist > 15 then 
-                angle = atan2(center_y - by, center_x - bx) 
+        local dist = getDistance(bx, by, az_target_x, az_target_y)
+        
+        -- Nuqtaga yetib kelsa yoki harakat vaqti tugasa yangi holat tanlaydi
+        if dist < 1.5 or os.time() > state_timer then
+            getNewAZTarget()
+            
+            local rand = math.random(1, 100)
+            if rand < 25 then
+                -- 25% imkoniyat bilan to'xtab turadi (nafas oladi, atrofga qaraydi)
+                bot_state = "idle"
+                state_timer = os.time() + math.random(2, 5)
+            else
+                -- Yana AZ ichidan yangi maqsad tanlab yuguradi
+                bot_state = (rand > 75) and "sprint" or ((rand > 35) and "run" or "walk")
+                state_timer = os.time() + math.random(5, 12)
             end
+        end
+        
+        local want_jump = false
+        if bot_state ~= "idle" and math.random(1, 100) > 95 then
+            want_jump = true
+        end
+        
+        if bot_state == "idle" then
+            data.keysData = want_jump and 32 or 0
+            data.moveSpeed.x = 0
+            data.moveSpeed.y = 0
+            data.moveSpeed.z = 0
+            current_speed = 0
+        else
+            local target_angle = atan2(az_target_y - by, az_target_x - bx)
+            -- Tabiiy harakat qilish uchun burchakka kichik xatolik (randomness) qo'shamiz
+            angle = target_angle + (math.random() - 0.5) * 0.15 
+            
+            if bot_state == "sprint" then
+                data.keysData = want_jump and 40 or 8 -- 8 yugurish + 32 sakrash
+                current_speed = 0.25
+            elseif bot_state == "run" then
+                data.keysData = want_jump and 34 or 2 -- 2 oddiy yugurish + 32 sakrash
+                current_speed = 0.15
+            else
+                data.keysData = want_jump and 34 or 2
+                current_speed = 0.08
+            end
+            
             data.position.x = bx + math.cos(angle) * current_speed
             data.position.y = by + math.sin(angle) * current_speed
-            setBotPosition(data.position.x, data.position.y, bz)
+            data.position.z = az_z
+            setBotPosition(data.position.x, data.position.y, az_z)
         end
         
         return { data }
     end
 end
 
+-- ================= SAMP EVENTLAR (XABARLAR) =================
 function sampev.onServerMessage(color, text)
     if license_stopped or is_paused then 
         return 
@@ -1406,6 +1464,7 @@ function sampev.onServerMessage(color, text)
         end
     end
 
+    -- DOUBLE ANSWER HIMOYA TIZIMI 
     local tid, ans = clean:match("<ADM>.-%[%d+%]%s+.-%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)")
     if not tid then 
         tid, ans = clean:match("%[A%].-%[%d+%]%s+%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)") 
@@ -1458,9 +1517,7 @@ function sampev.onServerMessage(color, text)
         pending_reports[closed_id] = nil
     end
 
-    -- =================================================
-    -- REPORTNI QABUL QILISH VA KUTISH
-    -- =================================================
+    -- ================= REPORTNI QABUL QILISH VA KUTISH =================
     if clean:find("%[Hisobotlar soni:") then
         local rep_name = clean:match("([%a_]+)%[%d+%]:")
         local rep_id, rep_text = clean:match("%[(%d+)%]:%s*(.-)%s*%[Hisobotlar")
@@ -1477,6 +1534,7 @@ function sampev.onServerMessage(color, text)
             rep_id = tostring(rep_id)
             rep_text = rep_text:match("^%s*(.-)%s*$") or rep_text
             prunePending()
+            
             pending_reports[rep_id] = { text = rep_text, time = os.time() }
             
             sendTG("🔔 *YANGI REPORT KELDI!*\n👤 O'yinchi: `" .. tgSafe(rep_name) .. "` (ID: " .. rep_id .. ")\n💬 Matn: `" .. tgSafe(rep_text) .. "`")
@@ -1502,17 +1560,22 @@ function sampev.onServerMessage(color, text)
 
                     if is_flipped then
                         wait(math.random(1500, 3000))
+                        if not pending_reports[q_id] then return end 
                         sendInput("/flip " .. q_id)
                         final_reply = "Assalomu alaykum, mashinangizni to'g'rilab qo'ydim. Ehtiyotkorroq haydang."
                         
                     elseif is_bad then
                         local text_len = string.len(q_text)
                         wait(math.random(2000, 4000) + (text_len * 20))
+                        if not pending_reports[q_id] then return end 
                         final_reply = "Assalomu alaykum, server qoidalarini buzmang."
                         sendTG("⚠️ *DIQQAT! So'kinish ushlandi:*\n👤 O'yinchi: `" .. tgSafe(q_name) .. "`\n💬 Matn: `" .. tgSafe(q_text) .. "`", true)
                         
                     else
                         wait(report_delay * 1000)
+                        
+                        -- DOUBLE ANSWER HIMOYASI: Boshqa admin javob berib qo'ygan bo'lsa, to'xtaymiz
+                        if not pending_reports[q_id] then return end 
                         
                         final_reply = getSmartReply(q_text, q_name)
                         
@@ -1529,20 +1592,24 @@ QOIDALAR:
                                 final_reply = final_reply:gsub("https?://[%S]+", ""):gsub("%s+", " "):match("^%s*(.-)%s*$")
                             end
                             
-                            if not final_reply or final_reply == "" then 
+                            -- X BUG HIMOYASI
+                            if not final_reply or final_reply == "" or string.len(final_reply) < 4 then 
                                 final_reply = getFallbackReply(q_text) 
                             end
                         end
                     end
 
-                    if final_reply and final_reply:find("kuzat") and not is_bad then
-                        local eid = q_text:match("(%d+)")
-                        if eid then 
-                            table.insert(sp_queue, eid) 
+                    -- NAVBATGA QO'SHISH
+                    if pending_reports[q_id] then
+                        if final_reply and final_reply:find("kuzat") and not is_bad then
+                            local eid = q_text:match("(%d+)")
+                            if eid then 
+                                table.insert(sp_queue, eid) 
+                            end
                         end
+                        
+                        table.insert(report_queue, { id = q_id, reply = final_reply, name = q_name, text = q_text })
                     end
-                    
-                    table.insert(report_queue, { id = q_id, reply = final_reply, name = q_name, text = q_text })
                 end)
             end
         end
@@ -1556,9 +1623,7 @@ QOIDALAR:
     end
 end
 
--- =================================================
--- DIALOG HANDLER
--- =================================================
+-- ================= DIALOG VA KIRISH MANTIG'I =================
 local dialog_pass_keys = { "avtorizatsiya", "parol", "\\239\\224\\240\\238\\235\\252", "\\208\\191\\208\\176\\209\\128\\208\\190\\208\\187\\209\\140" }
 local dialog_welcome_keys = { "xush", "yangilik", "grand mobile", "\\228\\238\\225\\240\\238" }
 
@@ -1603,12 +1668,16 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
                 wait(2000)
                 spawn()
                 wait(3000)
-                sendInput("/az")
+                
+                -- AVTOMAT /AZ ZONAGA BORISH
+                sendInput("/az") 
                 wait(1500)
                 sendInput("/acceptgnews")
-                wait(1500)
-                sendInput("/sp")
-                sendTG("[OK] O'yinga kirdi!")
+                wait(2000)
+                
+                sendTG("🏃‍♂️ [OK] O'yinga kirdi va AZ zonada patrul boshladi!")
+                
+                -- AZ PATRULNI BOSHLASH
                 startWandering()
             end)
         end
@@ -1637,9 +1706,7 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
     end
 end
 
--- =================================================
--- ULANISH EVENTLARI
--- =================================================
+-- ================= ULANISH EVENTLARI =================
 function onConnectionClosed()
     stopWandering()
     is_logged_in = false
@@ -1665,9 +1732,7 @@ function onExit()
     pcall(function() ini.save(cfg, "settings\\config.txt") end) 
 end
 
--- =================================================
--- ASOSIY YUKLASH
--- =================================================
+-- ================= ASOSIY YUKLASH =================
 function onLoad()
     pcall(updater.checkAndUpdate, script_version)
 
@@ -1789,9 +1854,14 @@ function onLoad()
             else
                 local idle = os.time() - last_activity
 
+                -- === KUZATISHDAN AZ ZONAGA QAYTISH MANTIG'I ===
                 if is_spectating then
-                    if os.time() - sp_timer > 120 then 
-                        spectateRandomPlayer() 
+                    if os.time() - sp_timer > 90 then 
+                        sendInput("/sp") -- Kuzatuvni to'xtatish
+                        wait(500)
+                        sendInput("/az") -- AZ zonaga qaytish
+                        is_spectating = false
+                        startWandering() -- Patrulni davom ettirish
                     end
                 elseif #sp_queue > 0 then
                     local tid = table.remove(sp_queue, 1)
@@ -1800,36 +1870,35 @@ function onLoad()
                     sp_timer = os.time()
                     last_activity = os.time()
                     stopWandering()
-                elseif not is_wandering then
+                elseif not is_wandering and is_logged_in then
                     if idle > 5 then 
+                        sendInput("/az")
                         startWandering() 
-                    end
-                else
-                    if os.time() - wander_timer > 20 then
-                        stopWandering()
-                        spectateRandomPlayer()
                     end
                 end
 
                 if #report_queue > 0 then
                     local task = table.remove(report_queue, 1)
-                    local reply = task.reply
                     
-                    if not reply or reply == "" then 
-                        reply = getFallbackReply(task.text) 
+                    if pending_reports[task.id] then
+                        local reply = task.reply
+                        
+                        if not reply or reply == "" or string.len(reply) < 4 then 
+                            reply = getFallbackReply(task.text) 
+                        end
+                        
+                        sendInput("/ans " .. tostring(task.id) .. " " .. reply)
+
+                        sendTG("✅ *Bot javob berdi:*\n👤 O'yinchi: `" .. tgSafe(task.name) .. "` (ID: " .. task.id .. ")\n❓ Savol: `" .. tgSafe(task.text) .. "`\n💬 Javob: `" .. tgSafe(reply) .. "`")
+
+                        local today = os.date("%d.%m")
+                        cfg.daily_logs[today .. "_rep"] = (tonumber(cfg.daily_logs[today .. "_rep"]) or 0) + 1
+                        pcall(function() ini.save(cfg, "settings\\config.txt") end)
+
+                        wait(500)
+                        sendInput("/re " .. tostring(task.id))
+                        wait(1500)
                     end
-                    
-                    sendInput("/ans " .. tostring(task.id) .. " " .. reply)
-
-                    sendTG("✅ *Bot javob berdi:*\n👤 O'yinchi: `" .. tgSafe(task.name) .. "` (ID: " .. task.id .. ")\n❓ Savol: `" .. tgSafe(task.text) .. "`\n💬 Javob: `" .. tgSafe(reply) .. "`")
-
-                    local today = os.date("%d.%m")
-                    cfg.daily_logs[today .. "_rep"] = (tonumber(cfg.daily_logs[today .. "_rep"]) or 0) + 1
-                    pcall(function() ini.save(cfg, "settings\\config.txt") end)
-
-                    wait(500)
-                    sendInput("/re " .. tostring(task.id))
-                    wait(1500)
                 end
             end
         end
