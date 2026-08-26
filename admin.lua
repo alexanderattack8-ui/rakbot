@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v7.5 - 100% TO'LIQ VA ISHLAYDIGAN VERSIYA) ===
+-- === KOD BOSHLANISHI (admin.lua v7.6 - 100% TO'LIQ, GEMINI 2.0 FLASH MODELI) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 7.5
+local script_version = 7.6
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -608,7 +608,8 @@ function translateToUzbek(text, is_title)
     }
     
     local headers = { ["Content-Type"] = "application/json" }
-    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
+    -- gemini-2.0-flash MODELI ISHLATILDI
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" .. gemini_key
 
     local ok, response = pcall(function()
         return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 15.0 })
@@ -745,7 +746,7 @@ function updateFAQFromWeb(manual)
 end
 
 -- =================================================
--- AI FUNKSIYALARI (MANZIL TO'LIQ YANGILANDI - v7.5)
+-- AI FUNKSIYALARI (MANZIL TO'LIQ YANGILANDI - v7.6)
 -- =================================================
 function askGemini(system_prompt, user_text)
     if gemini_key == "" or ai_busy then 
@@ -764,8 +765,8 @@ function askGemini(system_prompt, user_text)
     
     local headers = { ["Content-Type"] = "application/json" }
     
-    -- V1BETA ga almashtirildi va xato kodi formatlandi
-    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
+    -- gemini-2.0-flash MODELI ISHLATILDI
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" .. gemini_key
     
     local ok, response = pcall(function()
         return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 12.0 })
@@ -781,7 +782,6 @@ function askGemini(system_prompt, user_text)
                 return out
             end
         else
-            -- AGAR YANA XATO QILSA, ENDI KONSOLDA SABABI KO'RINADI
             print("[AI XATO] KOD: " .. tostring(response.status_code) .. " | SABAB: " .. tostring(response.text))
         end
     else
