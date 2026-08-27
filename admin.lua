@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v8.9 - TO'LIQ YOYILGAN FORMAT, ADMIN STATS, AI FIX) ===
+-- === KOD BOSHLANISHI (admin.lua v9.2 - TO'LIQ YOYILGAN VA AI FIX) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 8.9
+local script_version = 8.92
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -182,11 +182,10 @@ local pending_admin_mirrors = {}
 local is_spectating = false
 local sp_timer = 0
 local is_wandering = false
-local wandering_enabled = true -- YUGURISH REJIMI STATUSI
-local waiting_for_grnd_bot_id = false -- GRND_BOT QIDIRUV STATUSI
+local wandering_enabled = true 
+local waiting_for_grnd_bot_id = false 
 local last_activity = os.time()
 
--- Odam harakati o'zgaruvchilari
 local az_target_x = 0
 local az_target_y = 0
 local bot_state = "idle" 
@@ -245,52 +244,15 @@ local faq_sections = {
 
 -- ================= SO'KINISHLAR LUG'ATI =================
 local exact_bad_words = {
-    "am", 
-    "ami", 
-    "amiga", 
-    "amini", 
-    "aminga", 
-    "amingni", 
-    "aming", 
-    "amlar",
-    "kot", 
-    "koti", 
-    "kotiga", 
-    "kotini", 
-    "kotinga", 
-    "kotingni", 
-    "koting", 
-    "kotlar",
-    "sik", 
-    "sikay", 
-    "sikaman", 
-    "sikamiz", 
-    "sikdi", 
-    "sikib", 
-    "sikiw", 
-    "sikish",
-    "jlb", 
-    "skn", 
-    "jala", 
-    "chort", 
-    "qoto", 
-    "skay"
+    "am", "ami", "amiga", "amini", "aminga", "amingni", "aming", "amlar",
+    "kot", "koti", "kotiga", "kotini", "kotinga", "kotingni", "koting", "kotlar",
+    "sik", "sikay", "sikaman", "sikamiz", "sikdi", "sikib", "sikiw", "sikish",
+    "jlb", "skn", "jala", "chort", "qoto", "skay"
 }
 
 local partial_bad_words = {
-    "dalbayob", 
-    "dalba", 
-    "suka", 
-    "blyat", 
-    "naxuy", 
-    "pidar", 
-    "gandon", 
-    "haromi", 
-    "qanjiq", 
-    "jalab", 
-    "qotog", 
-    "ambal", 
-    "haqorat"
+    "dalbayob", "dalba", "suka", "blyat", "naxuy", "pidar", "gandon", 
+    "haromi", "qanjiq", "jalab", "qotog", "ambal", "haqorat"
 }
 
 local function containsBadWord(text)
@@ -344,33 +306,13 @@ local auto_replies = {
 
 -- ================= RUXSAT ETILGAN BUYRUQLAR =================
 local allowed_cmds = {
-    ["/ban"] = true, 
-    ["/offban"] = true, 
-    ["/warn"] = true, 
-    ["/offwarn"] = true,
-    ["/kick"] = true, 
-    ["/mute"] = true, 
-    ["/rmute"] = true, 
-    ["/offmute"] = true,
-    ["/unmute"] = true, 
-    ["/offunmute"] = true, 
-    ["/jail"] = true, 
-    ["/unjail"] = true,
-    ["/freeze"] = true, 
-    ["/unfreeze"] = true, 
-    ["/slap"] = true, 
-    ["/slay"] = true,
-    ["/spec"] = true, 
-    ["/unspec"] = true, 
-    ["/spoff"] = true, 
-    ["/setworld"] = true, 
-    ["/goto"] = true, 
-    ["/gethere"] = true, 
-    ["/bring"] = true, 
-    ["/akick"] = true, 
-    ["/aban"] = true, 
-    ["/amute"] = true, 
-    ["/awarn"] = true
+    ["/ban"] = true, ["/offban"] = true, ["/warn"] = true, ["/offwarn"] = true,
+    ["/kick"] = true, ["/mute"] = true, ["/rmute"] = true, ["/offmute"] = true,
+    ["/unmute"] = true, ["/offunmute"] = true, ["/jail"] = true, ["/unjail"] = true,
+    ["/freeze"] = true, ["/unfreeze"] = true, ["/slap"] = true, ["/slay"] = true,
+    ["/spec"] = true, ["/unspec"] = true, ["/spoff"] = true, ["/setworld"] = true, 
+    ["/goto"] = true, ["/gethere"] = true, ["/bring"] = true, ["/akick"] = true, 
+    ["/aban"] = true, ["/amute"] = true, ["/awarn"] = true
 }
 
 -- ================= YORDAMCHI FUNKSIYALAR =================
@@ -756,8 +698,8 @@ function translateToUzbek(text, is_title)
         ["Content-Type"] = "application/json" 
     }
     
-    -- === DIQQAT: AI REJIMINI TO'G'RILASH (GEMINI 1.5 FLASH) ===
-    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" .. gemini_key
+    -- AI LINKI YANGILANDI (1.5 FLASH)
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
 
     local ok, response = pcall(function()
         return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 15.0 })
@@ -918,7 +860,7 @@ function updateFAQFromWeb(manual)
     end)
 end
 
--- ================= AI FUNKSIYALARI (GEMINI 1.5 UPDATE) =================
+-- ================= AI FUNKSIYALARI (GEMINI 1.5 FLASH) =================
 function askGemini(system_prompt, user_text)
     if gemini_key == "" or ai_busy then 
         return nil 
@@ -952,8 +894,8 @@ function askGemini(system_prompt, user_text)
         ["Content-Type"] = "application/json" 
     }
     
-    -- AI LINKI YANGILANDI
-    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" .. gemini_key
+    -- API LINK TO'LIQ YANGILANDI
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
     
     local ok, response = pcall(function()
         return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 12.0 })
@@ -1660,43 +1602,6 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- ================= MOSLASHUVCHAN ISM TANISH (FLEXIBLE NAME MATCHING) =================
-    local my_short_names = { 
-        "azim", 
-        "azimjon", 
-        "qariya" 
-    }
-    
-    local is_me_called = false
-    
-    for _, sname in ipairs(my_short_names) do
-        if lower_clean:find(sname) and not clean:find(bot_name) then
-            is_me_called = true
-            break
-        end
-    end
-
-    if is_me_called then
-        if clean:find("<ADM>") or clean:find("%[A%]") then
-            local adm_nm = clean:match("(%u%a+_%u%a+)%[%d+%]")
-            
-            if not adm_nm then
-                adm_nm = "Admin"
-            end
-            
-            sendTG("🚨 *Sizni chaqirishmoqda!* 🚨\n👤 *Kim:* `" .. tgSafe(adm_nm) .. "`\n💬 *Xabar:* `" .. tgSafe(clean) .. "`", true)
-            
-            newTask(function()
-                wait(math.random(20000, 30000))
-                local ai_reply = getAIChatReply(adm_nm .. " sizni chaqirdi: " .. clean, "admin")
-                
-                if ai_reply then 
-                    sendInput("/a " .. ai_reply) 
-                end
-            end)
-        end
-    end
-
     -- ================= GRND_BOT ID QIDIRUV (ANTI-AFK UCHUN) =================
     if waiting_for_grnd_bot_id then
         if lower_clean:find("grnd_bot") then
@@ -1722,7 +1627,7 @@ function sampev.onServerMessage(color, text)
                     wait(1000)
                     sendInput("/sp " .. b_id)
                     is_spectating = true
-                    sp_timer = os.time() + 999999 -- Yugurish o'chiq bo'lsa cheksiz vaqt specda turadi
+                    sp_timer = os.time() + 999999
                 end)
             end
             
@@ -1815,6 +1720,7 @@ function sampev.onServerMessage(color, text)
         end
     end
 
+    -- ================= ADMIN CHAT, JAZOLAR VA AI JAVOB =================
     local adm_chat_name, adm_chat_text = clean:match("<ADM>.-(%a+_%a+)%[%d+%]:%s*(.+)")
     
     if not adm_chat_name then
@@ -1914,14 +1820,19 @@ function sampev.onServerMessage(color, text)
         if not allowed_cmds[first_word] then
             local lower_adm = adm_chat_text:lower()
             local talking = false
-            local short_name = bot_name:match("^(%w+)_")
             
-            if short_name then 
-                short_name = short_name:lower() 
+            -- ================= YANGILANGAN ISM TANISH =================
+            local my_short_names = { "azim", "azimjon", "qariya", "bot" }
+            
+            for _, sname in ipairs(my_short_names) do
+                if lower_adm:find(sname, 1, true) then
+                    talking = true
+                    break
+                end
             end
-            
-            if (short_name and lower_adm:find(short_name, 1, true)) or lower_adm:find("bot", 1, true) or (active_chat_admin == adm_chat_name and (os.time() - active_chat_time) <= chat_timeout_seconds) then
-                talking = true
+
+            if active_chat_admin == adm_chat_name and (os.time() - active_chat_time) <= chat_timeout_seconds then 
+                talking = true 
             end
             
             if talking then
@@ -1933,12 +1844,16 @@ function sampev.onServerMessage(color, text)
                 local a_tx = adm_chat_text
                 
                 newTask(function()
-                    wait(math.random(30000, 40000))
+                    wait(math.random(5000, 10000)) 
                     local ai_reply = getAIChatReply(a_nm .. " siz haqingizda yozdi: " .. a_tx, "admin")
                     
                     if ai_reply then
                         sendInput("/a " .. ai_reply)
-                        sendTG("*AI Javob (Admin Chat):*\n" .. tgSafe(ai_reply))
+                        -- === AI JAVOBI TELEGRAMGA ===
+                        sendTG("🤖 *AI Javob Berdi (Admin Chat):*\n`" .. tgSafe(ai_reply) .. "`") 
+                    else
+                        -- === API XATOSI TELEGRAMGA ===
+                        sendTG("⚠️ *AI javob bera olmadi* (API kalit xato yoki ulanishda muammo).") 
                     end
                 end)
             end
