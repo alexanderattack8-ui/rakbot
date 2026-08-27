@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v8.5 - TO'LIQ KENGAYTIRILGAN FORMAT VA ANTI-AFK) ===
+-- === KOD BOSHLANISHI (admin.lua v8.6 - TO'LIQ KENGAYTIRILGAN FORMAT VA GRND_BOT SPEC) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 8.5
+local script_version = 8.6
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -64,7 +64,6 @@ local gemini_key = tostring(cfg.settings.gemini_key):match("^%s*(.-)%s*$") or ""
 local report_delay = tonumber(cfg.settings.report_delay) or 12
 
 -- ================= AZ ZONE KOORDINATALARI =================
--- Siz bergan 4 ta burchak koordinatalari (kenglik va uzunlik)
 local az_min_x = -745.7576
 local az_max_x = -696.5170
 local az_min_y = -2460.6765
@@ -118,7 +117,9 @@ local function checkLicense(force)
     license_ok = false
     
     for line in tostring(res.text):gmatch("[^\r\n]+") do
-        line = line:gsub("#.*$", ""):match("^%s*(.-)%s*$")
+        line = line:gsub("#.*$", "")
+        line = line:match("^%s*(.-)%s*$")
+        
         if line ~= "" and normalizeNick(line) == wanted then
             license_ok = true
             break
@@ -163,9 +164,11 @@ local pending_admin_mirrors = {}
 local is_spectating = false
 local sp_timer = 0
 local is_wandering = false
+local wandering_enabled = true -- YUGURISH REJIMI STATUSI
+local waiting_for_grnd_bot_id = false -- GRND_BOT QIDIRUV STATUSI
 local last_activity = os.time()
 
--- Odam harakati o'zgaruvchilari (Smart Movement)
+-- Odam harakati o'zgaruvchilari
 local az_target_x = 0
 local az_target_y = 0
 local bot_state = "idle" 
@@ -426,9 +429,11 @@ end
 -- ================= XOTIRA FUNKSIYALARI =================
 function bazaXato(reason)
     base_ok = false
+    
     if base_error_sent then 
         return 
     end
+    
     base_error_sent = true
     sendTG("[XATO] *Baza xatosi!*\n`" .. tgSafe(reason) .. "`")
 end
@@ -452,6 +457,7 @@ end
 
 function readJSONFile(path)
     local f = io.open(path, "r")
+    
     if not f then 
         return nil, "fayl topilmadi: " .. path 
     end
@@ -484,14 +490,17 @@ function loadMemory()
     
     if old_memory_file ~= memory_file then
         old_data = readJSONFile(old_memory_file)
+        
         if old_data then
             local moved = 0
+            
             for q, a in pairs(old_data) do
                 if bot_memory[q] == nil then
                     bot_memory[q] = a
                     moved = moved + 1
                 end
             end
+            
             if moved > 0 then 
                 saveMemory() 
             end
@@ -570,6 +579,7 @@ function getFAQReply(text)
     end
     
     local lower = normText(text)
+    
     if lower == "" then 
         return nil 
     end
@@ -605,6 +615,7 @@ function getFAQReply(text)
                 score = score + 1 
             end
         end
+        
         if score > best_score then 
             best_score = score
             best = data 
@@ -621,9 +632,11 @@ end
 function saveFAQToFile()
     local ok, err = pcall(function()
         local f = io.open(faq_file, "w")
+        
         if not f then 
             error("yozib bo'lmadi: " .. faq_file, 0) 
         end
+        
         f:write(json.encode(faq_base))
         f:close()
     end)
@@ -670,6 +683,7 @@ function extractArticleTitleAndBody(html)
     title = title or best_title
 
     local body_html = html:match("<article[^>]*>(.-)</article>")
+    
     if not body_html then
         body_html = html:match('<div[^>]-class="[^"]-article[^"]-"[^>]*>(.-)</div>%s*</div>')
     end
@@ -733,6 +747,7 @@ function translateToUzbek(text, is_title)
     if ok and response then
         if response.status_code == 200 then
             local ok2, data = pcall(json.decode, response.text)
+            
             if ok2 and data and data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts and data.candidates[1].content.parts[1] then
                 local out = data.candidates[1].content.parts[1].text
                 out = out:gsub('^"(.*)"$', "%1")
@@ -785,7 +800,9 @@ function updateFAQFromWeb(manual)
             if not url then 
                 return 
             end
+            
             local clean = url:gsub("#.*$", "")
+            
             if not seen_article[clean] then
                 seen_article[clean] = true
                 table.insert(articles, { url = clean, section = name })
@@ -822,6 +839,7 @@ function updateFAQFromWeb(manual)
             else
                 section_fail = section_fail + 1
             end
+            
             wait(800)
         end
 
@@ -842,6 +860,7 @@ function updateFAQFromWeb(manual)
                     
                     if uz_title and uz_body and uz_body ~= "" then
                         local key = normText(uz_title)
+                        
                         if key ~= "" then
                             new_faq[key] = { answer = uz_body, title = uz_title, url = art.url, section = art.section }
                             total_ok = total_ok + 1
@@ -867,6 +886,7 @@ function updateFAQFromWeb(manual)
         
         faq_last_update = os.time()
         cfg.faq_meta.last_update = faq_last_update
+        
         pcall(function() 
             ini.save(cfg, "settings\\config.txt") 
         end)
@@ -924,6 +944,7 @@ function askGemini(system_prompt, user_text)
     if ok and response then
         if response.status_code == 200 then
             local okd, data = pcall(json.decode, response.text)
+            
             if okd and data and data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts and data.candidates[1].content.parts[1] then
                 local out_text = data.candidates[1].content.parts[1].text
                 out_text = out_text:gsub("\n", " ")
@@ -954,6 +975,7 @@ function getSmartReply(text, sender_name)
     end
     
     local lower_text = normText(text)
+    
     if lower_text == "" then 
         return nil 
     end
@@ -977,6 +999,7 @@ function getSmartReply(text, sender_name)
     end
 
     local faq_reply = getFAQReply(text)
+    
     if faq_reply then
         local clean = tostring(faq_reply)
         clean = clean:gsub("https?://[%S]+", "")
@@ -1007,9 +1030,11 @@ function getSmartReply(text, sender_name)
 
         if bot_memory[lower_text] then
             local v = bot_memory[lower_text]
+            
             if priority_trusted and not isTrusted(v) then 
                 return nil 
             end
+            
             return memAnswer(v)
         end
         
@@ -1030,6 +1055,7 @@ function getSmartReply(text, sender_name)
         end
         
         local words = {}
+        
         for w in lower_text:gmatch("%S+") do
             if w:len() > 3 then 
                 table.insert(words, w) 
@@ -1045,6 +1071,7 @@ function getSmartReply(text, sender_name)
             end
             
             local score = 0
+            
             for _, w in ipairs(words) do
                 if question:find(w, 1, true) then 
                     score = score + 1 
@@ -1067,11 +1094,13 @@ function getSmartReply(text, sender_name)
     end
 
     local trusted_reply = searchMemory(true)
+    
     if trusted_reply then 
         return trusted_reply 
     end
     
     local normal_reply = searchMemory(false)
+    
     if normal_reply then 
         return normal_reply 
     end
@@ -1198,14 +1227,22 @@ function telegramPolling()
                                         wait(1000)
                                         spawn() 
                                         wait(1000)
-                                        is_spectating = false
-                                        startWandering()
+                                        
+                                        if wandering_enabled then
+                                            sendInput("/az")
+                                            is_spectating = false
+                                            startWandering()
+                                        else
+                                            waiting_for_grnd_bot_id = true
+                                            sendInput("/id grnd_bot")
+                                        end
                                     end)
                                 end
                                 
                             elseif low == "!cmd" then
                                 local menyu_text = "*MENYU (v" .. tostring(script_version) .. ")*\n\n"
                                 menyu_text = menyu_text .. "`/stats` - Hisobot\n"
+                                menyu_text = menyu_text .. "`!run` - Yugurishni yoqish yoki o'chirish\n"
                                 menyu_text = menyu_text .. "`!admins` - Onlayn adminlar\n"
                                 menyu_text = menyu_text .. "`!spec [id]` - O'yinchini kuzatish\n"
                                 menyu_text = menyu_text .. "`!spoff` - Kuzatuvdan chiqish\n"
@@ -1218,16 +1255,44 @@ function telegramPolling()
                                 menyu_text = menyu_text .. "`!status` - Bot holati"
                                 sendTG(menyu_text)
                                 
+                            elseif low == "!run" or low == "!patrul" then
+                                wandering_enabled = not wandering_enabled
+                                
+                                if wandering_enabled then
+                                    sendTG("🏃‍♂️ *Yugurish rejimi: YOQILDI.*\nBot endi AZ zonada patrul qiladi.")
+                                    newTask(function()
+                                        sendInput("/spoff")
+                                        wait(1000)
+                                        spawn()
+                                        wait(1000)
+                                        sendInput("/az")
+                                        is_spectating = false
+                                        startWandering()
+                                    end)
+                                else
+                                    sendTG("🛑 *Yugurish rejimi: O'CHIRILDI.*\n`grnd_bot` ID si qidirilmoqda (Anti-AFK uchun)...")
+                                    stopWandering()
+                                    waiting_for_grnd_bot_id = true
+                                    sendInput("/id grnd_bot")
+                                end
+                                
                             elseif low == "!spoff" then
                                 sendInput("/spoff")
                                 newTask(function()
                                     wait(1000)
                                     spawn()
                                     wait(1000)
-                                    sendInput("/az")
-                                    is_spectating = false
-                                    startWandering()
-                                    sendTG("✅ Kuzatuvdan chiqildi va AZ patrul davom etmoqda.")
+                                    
+                                    if wandering_enabled then
+                                        sendInput("/az")
+                                        is_spectating = false
+                                        startWandering()
+                                        sendTG("✅ Kuzatuvdan chiqildi va AZ patrul davom etmoqda.")
+                                    else
+                                        waiting_for_grnd_bot_id = true
+                                        sendInput("/id grnd_bot")
+                                        sendTG("✅ Kuzatuvdan chiqildi. `grnd_bot` qidirilmoqda...")
+                                    end
                                 end)
 
                             elseif low == "!admins" then
@@ -1257,9 +1322,11 @@ function telegramPolling()
                                 if new_delay and new_delay >= 0 then
                                     report_delay = new_delay
                                     cfg.settings.report_delay = tostring(report_delay)
+                                    
                                     pcall(function() 
                                         ini.save(cfg, "settings\\config.txt") 
                                     end)
+                                    
                                     sendTG("⏱ *Botning report kutish vaqti o'zgartirildi:* `" .. report_delay .. "` soniya.")
                                 end
                                 
@@ -1349,10 +1416,16 @@ function telegramPolling()
                                     status_msg = status_msg .. "SP: Yo'q\n"
                                 end
                                 
-                                if is_wandering then
-                                    status_msg = status_msg .. "Yurmoqda: Ha\n"
+                                if wandering_enabled then
+                                    status_msg = status_msg .. "Yugurish: Yoqilgan\n"
                                 else
-                                    status_msg = status_msg .. "Yurmoqda: Yo'q\n"
+                                    status_msg = status_msg .. "Yugurish: O'chirilgan\n"
+                                end
+                                
+                                if is_wandering then
+                                    status_msg = status_msg .. "Harakat: Yugurmoqda\n"
+                                else
+                                    status_msg = status_msg .. "Harakat: To'xtagan\n"
                                 end
                                 
                                 status_msg = status_msg .. "Oxirgi harakat: `" .. idle .. "` soniya oldin\n"
@@ -1386,15 +1459,13 @@ function sampev.onSendPlayerSync(data)
         return false 
     end
     
-    if is_wandering then
+    if is_wandering and wandering_enabled then
         last_activity = os.time()
         
-        -- BUG FIX: RakSAMP Lite'da data ichidagi koordinatalarni to'g'ridan to'g'ri olamiz
         local bx = data.position.x
         local by = data.position.y
         local bz = data.position.z
         
-        -- Agar bot endi ulangan bo'lsa va hali nol (0,0,0) koordinatada tursa, harakatlanishni kutib turadi
         if bx == 0 and by == 0 then 
             return { data } 
         end
@@ -1489,8 +1560,14 @@ function sampev.onTogglePlayerSpectating(state)
             wait(800)
             spawn() 
             wait(1200)
-            sendInput("/az")
-            startWandering()
+            
+            if wandering_enabled then
+                sendInput("/az")
+                startWandering()
+            else
+                waiting_for_grnd_bot_id = true
+                sendInput("/id grnd_bot")
+            end
         end)
     end
 end
@@ -1510,14 +1587,48 @@ function sampev.onServerMessage(color, text)
         table.remove(web_logs, 1) 
     end
 
-    -- SMART ANTI-AFK SELF-HEALING (SPAMDAN HIMOYA QILINGAN)
+    -- ================= GRND_BOT ID QIDIRUV (ANTI-AFK UCHUN) =================
+    if waiting_for_grnd_bot_id then
+        if lower_clean:find("grnd_bot") then
+            local b_id = clean:match("grnd_bot%s*%[(%d+)%]")
+            
+            if not b_id then
+                b_id = clean:match("grnd_bot%s*%(%d+%)")
+            end
+            
+            if not b_id then
+                b_id = clean:match("[Ii][Dd]:%s*(%d+)")
+            end
+            
+            if not b_id then
+                b_id = clean:match("%[(%d+)%]")
+            end
+            
+            if b_id then
+                waiting_for_grnd_bot_id = false
+                sendTG("✅ `grnd_bot` topildi (ID: " .. b_id .. "). Bot endi shuni kuzatib turadi.")
+                
+                newTask(function()
+                    wait(1000)
+                    sendInput("/sp " .. b_id)
+                    is_spectating = true
+                    sp_timer = os.time() + 999999 -- Yugurish o'chiq bo'lsa cheksiz vaqt specda turadi
+                end)
+            end
+            
+        elseif lower_clean:find("topilmadi") or lower_clean:find("ne nayden") or lower_clean:find("not found") then
+            waiting_for_grnd_bot_id = false
+            sendTG("⚠️ `grnd_bot` serverda topilmadi! Yugurish ham o'chirilgan, bot AFK ga tushib qolishi mumkin.")
+        end
+    end
+
+    -- ================= SMART ANTI-AFK SELF-HEALING =================
     if not is_paused and clean:find(bot_name) and clean:find("AFK %[%d+:%d+%]") then
         local afk_m, afk_s = clean:match(bot_name .. ".-AFK %[(%d+):(%d+)%]")
         
         if afk_m and afk_s then
             local total_sec = tonumber(afk_m) * 60 + tonumber(afk_s)
             
-            -- Faqat AFK vaqti 15 sekunddan ko'p bo'lsa va oxirgi marta "davolanganiga" 1 daqiqa bo'lgan bo'lsa ishlaydi
             if total_sec > 15 and (os.time() - last_heal_time) > 60 then
                 last_heal_time = os.time()
                 
@@ -1525,10 +1636,17 @@ function sampev.onServerMessage(color, text)
                     wait(500)
                     spawn() 
                     wait(1500)
-                    sendInput("/az")
-                    is_spectating = false
-                    startWandering()
-                    sendTG("⚠️ *Anti-AFK Tizimi:* Bot serverda AFK deb topildi ("..total_sec.." sek) va muvaffaqiyatli tiklandi (spawn+az)!")
+                    
+                    if wandering_enabled then
+                        sendInput("/az")
+                        is_spectating = false
+                        startWandering()
+                        sendTG("⚠️ *Anti-AFK Tizimi:* Bot AFK ("..total_sec.."s) deb topildi va AZ patrul orqali tiklandi!")
+                    else
+                        waiting_for_grnd_bot_id = true
+                        sendInput("/id grnd_bot")
+                        sendTG("⚠️ *Anti-AFK Tizimi:* Bot AFK ("..total_sec.."s) deb topildi va `grnd_bot` orqali tiklanmoqda!")
+                    end
                 end)
             end
         end
@@ -1787,11 +1905,13 @@ function sampev.onServerMessage(color, text)
                     end
                     
                     local trusted_flag = false
+                    
                     if is_red_ans then
                         trusted_flag = true
                     end
                     
                     local fallback_admin = "?"
+                    
                     if ans_admin then
                         fallback_admin = ans_admin
                     end
@@ -1840,6 +1960,7 @@ function sampev.onServerMessage(color, text)
             rep_id = tostring(rep_id)
             
             local clean_rep_text = rep_text:match("^%s*(.-)%s*$")
+            
             if clean_rep_text then
                 rep_text = clean_rep_text
             end
@@ -1927,6 +2048,7 @@ QOIDALAR:
                     if pending_reports[q_id] then
                         if final_reply and final_reply:find("kuzat") and not is_bad then
                             local eid = q_text:match("(%d+)")
+                            
                             if eid then 
                                 table.insert(sp_queue, eid) 
                             end
@@ -2007,12 +2129,21 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
                 wait(2000)
                 spawn()
                 wait(3000)
-                sendInput("/az") 
-                wait(1500)
-                sendInput("/acceptgnews")
-                wait(2000)
-                sendTG("🏃‍♂️ [OK] O'yinga kirdi va AZ zonada patrul boshladi!")
-                startWandering()
+                
+                if wandering_enabled then
+                    sendInput("/az") 
+                    wait(1500)
+                    sendInput("/acceptgnews")
+                    wait(2000)
+                    sendTG("🏃‍♂️ [OK] O'yinga kirdi va AZ zonada patrul boshladi!")
+                    startWandering()
+                else
+                    sendInput("/acceptgnews")
+                    wait(2000)
+                    waiting_for_grnd_bot_id = true
+                    sendInput("/id grnd_bot")
+                    sendTG("🏃‍♂️ [OK] O'yinga kirdi, `grnd_bot` qidirilmoqda...")
+                end
             end)
         end
         
@@ -2197,13 +2328,14 @@ function onLoad()
             end
 
             if sleep_end_time > os.time() or is_paused then
-                -- Kutish jarayoni (Pause yoki Sleep)
+                -- Kutish jarayoni
             else
                 local idle = os.time() - last_activity
 
-                -- === KUZATISHDAN AZ ZONAGA QAYTISH MANTIG'I ===
+                -- === KUZATISHDAN AZ ZONAGA QAYTISH YADA GRND_BOT NI QIDIRISH MANTIG'I ===
                 if is_spectating then
-                    if os.time() - sp_timer > 90 then 
+                    -- Faqat yugurish yoqiq bo'lsagina ma'lum vaqtdan so'ng specdan o'zi chiqadi
+                    if wandering_enabled and os.time() - sp_timer > 90 then 
                         sendInput("/spoff") 
                         wait(1000)
                         spawn() 
@@ -2220,7 +2352,8 @@ function onLoad()
                     last_activity = os.time()
                     stopWandering()
                 elseif not is_wandering and is_logged_in then
-                    if idle > 5 then 
+                    -- Yugurish yoqiq bo'lsagina az patrul boshlaydi
+                    if wandering_enabled and idle > 5 then 
                         sendInput("/az")
                         startWandering() 
                     end
