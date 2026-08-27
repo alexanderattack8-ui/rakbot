@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v9.5 - TO'LIQ YOYILGAN VA AI FIX) ===
+-- === KOD BOSHLANISHI (admin.lua v9.6 - TO'LIQ YOYILGAN, AI FLASH VA TEZLASHTIRILGAN JAVOB) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 9.5
+local script_version = 9.6
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -47,7 +47,7 @@ local cfg = ini.load({
         chatid = "",
         password = "",
         gemini_key = "",
-        report_delay = "12",
+        report_delay = "2", -- Kutish vaqti 2 soniyaga tushirildi
     },
     daily_logs = {
         start_time = os.time()
@@ -64,7 +64,7 @@ local bot_name = tostring(cfg.settings.bot_name):match("^%s*(.-)%s*$") or ""
 local bot_token = tostring(cfg.settings.token):match("^%s*(.-)%s*$") or ""
 local bot_chatid = tostring(cfg.settings.chatid):match("^%s*(.-)%s*$") or ""
 local gemini_key = tostring(cfg.settings.gemini_key):match("^%s*(.-)%s*$") or ""
-local report_delay = tonumber(cfg.settings.report_delay) or 12
+local report_delay = tonumber(cfg.settings.report_delay) or 2
 
 -- Admin statistikasini xotiraga o'qish
 local admin_statistics = {}
@@ -931,7 +931,7 @@ function askGemini(system_prompt, user_text)
         ["Content-Type"] = "application/json" 
     }
     
-    -- API LINK TO'LIQ YANGILANDI
+    -- API LINK TO'LIQ YANGILANDI (1.5 FLASH)
     local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
     
     local ok, response = pcall(function()
@@ -2080,6 +2080,7 @@ function sampev.onServerMessage(color, text)
                         sendTG("⚠️ *DIQQAT! So'kinish ushlandi:*\n👤 O'yinchi: `" .. tgSafe(q_name) .. "`\n💬 Matn: `" .. tgSafe(q_text) .. "`", true)
                         
                     else
+                        -- BU YERDA KUTISH VAQTI ISHLATILADI (Endi 2 soniya)
                         wait(report_delay * 1000)
                         
                         if not pending_reports[q_id] then 
