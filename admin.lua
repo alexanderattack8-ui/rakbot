@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v9.6 - TO'LIQ YOYILGAN, AI FLASH VA TEZLASHTIRILGAN JAVOB) ===
+-- === KOD BOSHLANISHI (admin.lua v9.7 - CHEKLOVSIZ JAVOB BERISH REJIMI) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 9.6
+local script_version = 9.7
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -47,7 +47,7 @@ local cfg = ini.load({
         chatid = "",
         password = "",
         gemini_key = "",
-        report_delay = "2", -- Kutish vaqti 2 soniyaga tushirildi
+        report_delay = "2",
     },
     daily_logs = {
         start_time = os.time()
@@ -735,7 +735,6 @@ function translateToUzbek(text, is_title)
         ["Content-Type"] = "application/json" 
     }
     
-    -- AI LINKI YANGILANDI (1.5 FLASH)
     local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
 
     local ok, response = pcall(function()
@@ -931,7 +930,6 @@ function askGemini(system_prompt, user_text)
         ["Content-Type"] = "application/json" 
     }
     
-    -- API LINK TO'LIQ YANGILANDI (1.5 FLASH)
     local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" .. gemini_key
     
     local ok, response = pcall(function()
@@ -1858,7 +1856,6 @@ function sampev.onServerMessage(color, text)
             local lower_adm = adm_chat_text:lower()
             local talking = false
             
-            -- ================= YANGILANGAN ISM TANISH =================
             local my_short_names = { "azim", "azimjon", "qariya", "bot" }
             
             for _, sname in ipairs(my_short_names) do
@@ -1876,7 +1873,6 @@ function sampev.onServerMessage(color, text)
                 active_chat_admin = adm_chat_name
                 active_chat_time = os.time()
                 
-                -- SHU YERDA BIRINCHI TELEGRAM XABARI KETADI (100% KAFOLAT)
                 sendTG("⏳ *AI o'ylamoqda...*\n👤 Admin: `" .. tgSafe(adm_chat_name) .. "`\n💬 Yozdi: `" .. tgSafe(adm_chat_text) .. "`", true)
                 
                 local a_nm = adm_chat_name
@@ -1888,10 +1884,8 @@ function sampev.onServerMessage(color, text)
                     
                     if ai_reply then
                         sendInput("/a " .. ai_reply)
-                        -- === AI JAVOBI TELEGRAMGA ===
                         sendTG("🤖 *AI Javob Berdi (Admin Chat):*\n`" .. tgSafe(ai_reply) .. "`") 
                     else
-                        -- === API XATOSI TELEGRAMGA ===
                         sendTG("⚠️ *AI javob bera olmadi* (API kalit xato yoki ulanishda muammo).") 
                     end
                 end)
@@ -1924,7 +1918,7 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- DOUBLE ANSWER HIMOYA TIZIMI 
+    -- DOUBLE ANSWER HIMOYA TIZIMI (ENDI O'CHIRILGAN)
     local tid, ans = nil, nil
     
     if clean:match("<ADM>.-%[%d+%]%s+.-%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)") then
@@ -1985,7 +1979,8 @@ function sampev.onServerMessage(color, text)
                 end
             end
             
-            pending_reports[tid] = nil 
+            -- DOUBLE ANSWER HIMOYA OLIB TASHLANDI
+            -- pending_reports[tid] = nil 
         end
     end
 
@@ -2001,7 +1996,8 @@ function sampev.onServerMessage(color, text)
     
     if closed_id then
         closed_id = tostring(closed_id)
-        pending_reports[closed_id] = nil
+        -- REPORT YOPILSA HAM JAVOB BERISHI UCHUN BU YER HAM OLIB TASHLANDI
+        -- pending_reports[closed_id] = nil
     end
 
     -- ================= REPORTNI QABUL QILISH VA KUTISH =================
@@ -2061,9 +2057,8 @@ function sampev.onServerMessage(color, text)
                     if is_flipped then
                         wait(math.random(1500, 3000))
                         
-                        if not pending_reports[q_id] then 
-                            return 
-                        end 
+                        -- Endi bu qatorlar yo'q, bot hamma holatda o'z komandasini yuboradi
+                        -- if not pending_reports[q_id] then return end 
                         
                         sendInput("/flip " .. q_id)
                         final_reply = "Assalomu alaykum, mashinangizni to'g'rilab qo'ydim. Ehtiyotkorroq haydang."
@@ -2072,20 +2067,16 @@ function sampev.onServerMessage(color, text)
                         local text_len = string.len(q_text)
                         wait(math.random(2000, 4000) + (text_len * 20))
                         
-                        if not pending_reports[q_id] then 
-                            return 
-                        end 
+                        -- if not pending_reports[q_id] then return end 
                         
                         final_reply = "Assalomu alaykum, server qoidalarini buzmang."
                         sendTG("⚠️ *DIQQAT! So'kinish ushlandi:*\n👤 O'yinchi: `" .. tgSafe(q_name) .. "`\n💬 Matn: `" .. tgSafe(q_text) .. "`", true)
                         
                     else
-                        -- BU YERDA KUTISH VAQTI ISHLATILADI (Endi 2 soniya)
                         wait(report_delay * 1000)
                         
-                        if not pending_reports[q_id] then 
-                            return 
-                        end 
+                        -- HIMOYA OLIB TASHLANDI: agar boshqa admin javob yozgan bo'lsa ham bot to'xtamaydi!
+                        -- if not pending_reports[q_id] then return end 
                         
                         final_reply = getSmartReply(q_text, q_name)
                         
