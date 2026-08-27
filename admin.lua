@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v8.1 - 100% TO'LIQ FORMAT VA AZ PATRUL) ===
+-- === KOD BOSHLANISHI (admin.lua v8.2 - 100% TO'LIQ FORMAT, AFK FIX & AZ PATRUL) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 8.1
+local script_version = 8.2
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -337,6 +337,7 @@ local allowed_cmds = {
     ["/slay"] = true,
     ["/spec"] = true, 
     ["/unspec"] = true, 
+    ["/spoff"] = true, 
     ["/setworld"] = true, 
     ["/goto"] = true,
     ["/gethere"] = true, 
@@ -1103,9 +1104,32 @@ function telegramPolling()
                                 sendTG("[TG] Buyruq yuborildi:\n`" .. tgSafe(txt) .. "`")
                                 tg_capture_timer = os.clock() + 3.0
                                 
-                            elseif low == "!cmd" then
-                                sendTG("*MENYU (v" .. tostring(script_version) .. ")*\n\n`/stats` - Hisobot\n`!admins` - Onlayn adminlar\n`!spec [id]` - O'yinchini kuzatish\n`!stats [id]` - O'yinchi statisikasi\n`!delay [sekund]` - Javob vaqtini o'zgartirish\n`!pause` - Cheksiz uxlash\n`!unpause` - Qayta ishlash\n`!pause [daq]` - Vaqtli uxlash\n`!a [matn]` - Admin chat\n`!status` - Bot holati")
+                                -- TELEGRAMDAN MANUALLY SPOFF QILSA BOT AFK BO'LMASLIGI UCHUN
+                                if low == "/spoff" or low == "/sp" then
+                                    newTask(function()
+                                        wait(1000)
+                                        spawn() -- RAKBOTNI UYG'OTISH
+                                        wait(1000)
+                                        is_spectating = false
+                                        startWandering()
+                                    end)
+                                end
                                 
+                            elseif low == "!cmd" then
+                                sendTG("*MENYU (v" .. tostring(script_version) .. ")*\n\n`/stats` - Hisobot\n`!admins` - Onlayn adminlar\n`!spec [id]` - O'yinchini kuzatish\n`!spoff` - Kuzatuvdan chiqish\n`!stats [id]` - O'yinchi statisikasi\n`!delay [sekund]` - Javob vaqtini o'zgartirish\n`!pause` - Cheksiz uxlash\n`!unpause` - Qayta ishlash\n`!pause [daq]` - Vaqtli uxlash\n`!a [matn]` - Admin chat\n`!status` - Bot holati")
+                                
+                            elseif low == "!spoff" then
+                                sendInput("/spoff")
+                                newTask(function()
+                                    wait(1000)
+                                    spawn()
+                                    wait(1000)
+                                    sendInput("/az")
+                                    is_spectating = false
+                                    startWandering()
+                                    sendTG("✅ Kuzatuvdan chiqildi va AZ patrul davom etmoqda.")
+                                end)
+
                             elseif low == "!admins" then
                                 checking_admins = true
                                 online_admins_table = {}
@@ -1857,8 +1881,10 @@ function onLoad()
                 -- === KUZATISHDAN AZ ZONAGA QAYTISH MANTIG'I ===
                 if is_spectating then
                     if os.time() - sp_timer > 90 then 
-                        sendInput("/sp") -- Kuzatuvni to'xtatish
-                        wait(500)
+                        sendInput("/spoff") -- AFK BUG FIX: Kuzatuvdan chiqish
+                        wait(1000)
+                        spawn() -- RakBot'ni uyg'otib yuborish!
+                        wait(1000)
                         sendInput("/az") -- AZ zonaga qaytish
                         is_spectating = false
                         startWandering() -- Patrulni davom ettirish
