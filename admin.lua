@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v8.2 - 100% TO'LIQ FORMAT, AFK FIX & AZ PATRUL) ===
+-- === KOD BOSHLANISHI (admin.lua v8.3 - 100% TO'LIQ FORMAT, ANTI-AFK SELF-HEALING & AZ PATRUL) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 8.2
+local script_version = 8.3
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -1104,11 +1104,10 @@ function telegramPolling()
                                 sendTG("[TG] Buyruq yuborildi:\n`" .. tgSafe(txt) .. "`")
                                 tg_capture_timer = os.clock() + 3.0
                                 
-                                -- TELEGRAMDAN MANUALLY SPOFF QILSA BOT AFK BO'LMASLIGI UCHUN
                                 if low == "/spoff" or low == "/sp" then
                                     newTask(function()
                                         wait(1000)
-                                        spawn() -- RAKBOTNI UYG'OTISH
+                                        spawn() 
                                         wait(1000)
                                         is_spectating = false
                                         startWandering()
@@ -1257,11 +1256,9 @@ function sampev.onSendPlayerSync(data)
             
             local rand = math.random(1, 100)
             if rand < 25 then
-                -- 25% imkoniyat bilan to'xtab turadi (nafas oladi, atrofga qaraydi)
                 bot_state = "idle"
                 state_timer = os.time() + math.random(2, 5)
             else
-                -- Yana AZ ichidan yangi maqsad tanlab yuguradi
                 bot_state = (rand > 75) and "sprint" or ((rand > 35) and "run" or "walk")
                 state_timer = os.time() + math.random(5, 12)
             end
@@ -1280,14 +1277,13 @@ function sampev.onSendPlayerSync(data)
             current_speed = 0
         else
             local target_angle = atan2(az_target_y - by, az_target_x - bx)
-            -- Tabiiy harakat qilish uchun burchakka kichik xatolik (randomness) qo'shamiz
             angle = target_angle + (math.random() - 0.5) * 0.15 
             
             if bot_state == "sprint" then
-                data.keysData = want_jump and 40 or 8 -- 8 yugurish + 32 sakrash
+                data.keysData = want_jump and 40 or 8 
                 current_speed = 0.25
             elseif bot_state == "run" then
-                data.keysData = want_jump and 34 or 2 -- 2 oddiy yugurish + 32 sakrash
+                data.keysData = want_jump and 34 or 2 
                 current_speed = 0.15
             else
                 data.keysData = want_jump and 34 or 2
@@ -1304,6 +1300,25 @@ function sampev.onSendPlayerSync(data)
     end
 end
 
+-- ================= RPC KUZATUV DETEKTORI =================
+function sampev.onTogglePlayerSpectating(state)
+    if is_paused or license_stopped then return end
+    
+    if state then
+        is_spectating = true
+        stopWandering()
+    else
+        is_spectating = false
+        newTask(function()
+            wait(800)
+            spawn() -- RakSAMP Lite holatini yangilash!
+            wait(1200)
+            sendInput("/az")
+            startWandering()
+        end)
+    end
+end
+
 -- ================= SAMP EVENTLAR (XABARLAR) =================
 function sampev.onServerMessage(color, text)
     if license_stopped or is_paused then 
@@ -1316,6 +1331,19 @@ function sampev.onServerMessage(color, text)
     table.insert(web_logs, { time = os.date("%H:%M:%S"), text = clean })
     if #web_logs > MAX_LOGS then 
         table.remove(web_logs, 1) 
+    end
+
+    -- ANTI-AFK SELF-HEALING: Agar bot "/admins" ro'yxatida o'zini AFK deb ko'rsa...
+    if not is_paused and clean:find(bot_name) and clean:find("AFK %[%d+") then
+        newTask(function()
+            wait(500)
+            spawn() -- O'zini o'zi davolash!
+            wait(1500)
+            sendInput("/az")
+            is_spectating = false
+            startWandering()
+            sendTG("⚠️ *Anti-AFK Tizimi:* Bot serverda AFK qotib qolganini aniqladi va o'zini muvaffaqiyatli tikladi (spawn+az)!")
+        end)
     end
 
     if tg_capture_timer and os.clock() <= tg_capture_timer then
