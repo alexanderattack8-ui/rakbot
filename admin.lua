@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v9.2 - TO'LIQ YOYILGAN VA AI FIX) ===
+-- === KOD BOSHLANISHI (admin.lua v9.5 - TO'LIQ YOYILGAN VA AI FIX) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 8.92
+local script_version = 9.5
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -232,6 +232,36 @@ local red_admins = {
     ["Ivan_Vasilyev"] = true,
     ["Felix_Hatred"] = true,
     ["Maga_By"] = true
+}
+
+-- ================= GRND RASMIY QOIDALAR BAZASI (TO'LIQ) =================
+local grnd_rules_database = {
+    ["1.2"] = "Akkaunt yoki shaxsni ma'muriyat/dasturchi deb ko'rsatish: 3-7 kun ban. Jiddiy holatda 31 kun ban.",
+    ["1.3"] = "Qoidalardagi bo'shliqlardan foydalanishga urinish: 3-31 kun ban.",
+    ["2.1"] = "O'yinchini haqorat qilish: 15-30 daqiqa Mute. Qarindoshlar haqida eslatish: 90-180 daqiqa Mute. Qarindoshlarni haqorat qilish: 3-10 kun ban.",
+    ["2.2"] = "Giyohvandlik, pornografiya, ekstremizm targ'iboti: 3-14 kundan doimiy ban gacha.",
+    ["2.3"] = "Har qanday reklama (sayt, guruh, kanal): 60-120 daqiqa Mute yoki 31 kun ban.",
+    ["2.4"] = "Irqchilik, dinni haqorat qilish, siyosat: 60-180 daqiqa Mute yoki 1-31 kun ban.",
+    ["2.5"] = "Mikrofonda musiqa, baqiriq, shovqin yaratish: 20-60 daqiqa Mute.",
+    ["2.6"] = "IC va OOC nizolarini real hayotga o'tkazish, tahdid: 7 kundan doimiy bangacha.",
+    ["3.1"] = "Hisobni asossiz ishlatish, valyuta so'rash: Ogohlantirish / 30 daqiqagacha Mute.",
+    ["3.2"] = "Ma'muriyatni haqorat qilish, aldash: 30-60 daqiqa Mute yoki 3-31 kun ban.",
+    ["3.3"] = "Ma'muriyat ishiga aralashish, provokatsiya: Ogohlantirish yoki 60 daqiqa Demorgan.",
+    ["3.4"] = "Ma'muriyat harakatlarini muhokama qilish, trolling: 60 daqiqa Mute yoki 1-5 kun ban.",
+    ["4.1"] = "Valyuta manipulyatsiyasi, firibgarlik, sotish/sotib olish: 3-7 kundan 31 kun/doimiy bangacha.",
+    ["4.2"] = "Tahdid ostida qimmatbaho narsalarni tortib olish: 7-31 kun ban.",
+    ["4.4"] = "Real pulga o'yin mulki/valyutasini sotish/sotib olish: 31 kundan doimiy bangacha ban.",
+    ["4.5"] = "Kuniga 30,000,000 rubldan ortiq beg'araz pul o'tkazish: Mulkni qaytarish yoki 31 kun ban.",
+    ["4.7"] = "Serverlar o'rtasida mulk/valyuta o'tkazish: 31 kun ban + mulkni qaytarish.",
+    ["5.2"] = "Chit, avtokliker, makrolar, botlar va uchinchi tomon dasturlari: Bagoyuz uchun 3 kungacha ban; Avtokliker uchun 3-7 kun ban; Chit tarqatish/ishlatish uchun 7-31 kun ban.",
+    ["5.3"] = "RP vaziyatidan qochish, AFKga qochish: 60 daqiqagacha Demorgan.",
+    ["5.4"] = "Uy yoki kvartira kirish qismida (GZ yaqinida) odam o'ldirish: 120 daqiqa Demorgan.",
+    ["gz"] = "Yashil zonada (GZ) odam o'ldirish va zarar yetkazish taqiqlanadi: 60 daqiqa Demorgan + Ogohlantirish.",
+    ["db"] = "DriveBy (mashinadan turib otish yoki urib yuborish): 30 daqiqagacha Demorgan.",
+    ["sk"] = "Spawn Kill (tug'ilgan joyida o'ldirish): 60-120 daqiqa Demorgan. Ommaviy SK uchun Ogohlantirish va 3 kun ban.",
+    ["rk"] = "Qasos olish uchun o'ldirish (20 daqiqa ichida o'lgan joyiga qaytish): 30 daqiqagacha Demorgan.",
+    ["tk"] = "Team Kill (o'z faction/oila a'zosini o'ldirish): 30 daqiqa Demorgan yoki Ogohlantirish.",
+    ["dm"] = "DeathMatch (asossiz o'ldirish): 60 daqiqagacha Demorgan."
 }
 
 -- ================= FAQ BO'LIMLARI =================
@@ -544,6 +574,13 @@ function getFAQReply(text)
         return nil 
     end
     
+    -- Qoidalar bazasidan to'g'ridan-to'g'ri qidirish
+    for keyword, desc in pairs(grnd_rules_database) do
+        if lower:find(keyword, 1, true) then
+            return "Assalomu alaykum, GRND qoidasiga ko'ra: " .. desc
+        end
+    end
+
     for key, data in pairs(faq_base) do
         if lower == key then 
             return memAnswer(data) 
@@ -1838,7 +1875,9 @@ function sampev.onServerMessage(color, text)
             if talking then
                 active_chat_admin = adm_chat_name
                 active_chat_time = os.time()
-                sendTG("🚨 *DIQQAT! Admin chatda sizni chaqirishmoqda!* 🚨\n👤 *Admin:* `" .. tgSafe(adm_chat_name) .. "`\n💬 *Matn:* `" .. tgSafe(adm_chat_text) .. "`", true)
+                
+                -- SHU YERDA BIRINCHI TELEGRAM XABARI KETADI (100% KAFOLAT)
+                sendTG("⏳ *AI o'ylamoqda...*\n👤 Admin: `" .. tgSafe(adm_chat_name) .. "`\n💬 Yozdi: `" .. tgSafe(adm_chat_text) .. "`", true)
                 
                 local a_nm = adm_chat_name
                 local a_tx = adm_chat_text
