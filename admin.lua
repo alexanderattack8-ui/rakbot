@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v8.6 - TO'LIQ KENGAYTIRILGAN FORMAT VA GRND_BOT SPEC) ===
+-- === KOD BOSHLANISHI (admin.lua v8.9 - TO'LIQ YOYILGAN FORMAT, ADMIN STATS, AI FIX) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -10,7 +10,7 @@ math.randomseed(os.time())
 local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 8.6
+local script_version = 8.9
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -52,6 +52,9 @@ local cfg = ini.load({
     daily_logs = {
         start_time = os.time()
     },
+    admin_stats = {
+        data = "{}"
+    },
     faq_meta = {
         last_update = 0
     }
@@ -62,6 +65,21 @@ local bot_token = tostring(cfg.settings.token):match("^%s*(.-)%s*$") or ""
 local bot_chatid = tostring(cfg.settings.chatid):match("^%s*(.-)%s*$") or ""
 local gemini_key = tostring(cfg.settings.gemini_key):match("^%s*(.-)%s*$") or ""
 local report_delay = tonumber(cfg.settings.report_delay) or 12
+
+-- Admin statistikasini xotiraga o'qish
+local admin_statistics = {}
+pcall(function()
+    if cfg.admin_stats.data and cfg.admin_stats.data ~= "" then
+        admin_statistics = json.decode(cfg.admin_stats.data)
+    end
+end)
+
+local function saveAdminStats()
+    pcall(function()
+        cfg.admin_stats.data = json.encode(admin_statistics)
+        ini.save(cfg, "settings\\config.txt")
+    end)
+end
 
 -- ================= AZ ZONE KOORDINATALARI =================
 local az_min_x = -745.7576
@@ -738,7 +756,8 @@ function translateToUzbek(text, is_title)
         ["Content-Type"] = "application/json" 
     }
     
-    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" .. gemini_key
+    -- === DIQQAT: AI REJIMINI TO'G'RILASH (GEMINI 1.5 FLASH) ===
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" .. gemini_key
 
     local ok, response = pcall(function()
         return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 15.0 })
@@ -899,7 +918,7 @@ function updateFAQFromWeb(manual)
     end)
 end
 
--- ================= AI FUNKSIYALARI =================
+-- ================= AI FUNKSIYALARI (GEMINI 1.5 UPDATE) =================
 function askGemini(system_prompt, user_text)
     if gemini_key == "" or ai_busy then 
         return nil 
@@ -933,7 +952,8 @@ function askGemini(system_prompt, user_text)
         ["Content-Type"] = "application/json" 
     }
     
-    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" .. gemini_key
+    -- AI LINKI YANGILANDI
+    local url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" .. gemini_key
     
     local ok, response = pcall(function()
         return requests.post(url, { headers = headers, data = json.encode(payload), timeout = 12.0 })
@@ -1242,6 +1262,7 @@ function telegramPolling()
                             elseif low == "!cmd" then
                                 local menyu_text = "*MENYU (v" .. tostring(script_version) .. ")*\n\n"
                                 menyu_text = menyu_text .. "`/stats` - Hisobot\n"
+                                menyu_text = menyu_text .. "`!astats` - Adminlar statistikasi\n"
                                 menyu_text = menyu_text .. "`!run` - Yugurishni yoqish yoki o'chirish\n"
                                 menyu_text = menyu_text .. "`!admins` - Onlayn adminlar\n"
                                 menyu_text = menyu_text .. "`!spec [id]` - O'yinchini kuzatish\n"
@@ -1275,6 +1296,23 @@ function telegramPolling()
                                     waiting_for_grnd_bot_id = true
                                     sendInput("/id grnd_bot")
                                 end
+                                
+                            elseif low == "!astats" then
+                                local msg = "📊 *KUNLIK ADMINLAR STATISTIKASI:*\n\n"
+                                local found = false
+                                
+                                for admn, st in pairs(admin_statistics) do
+                                    found = true
+                                    msg = msg .. "👤 *" .. admn .. "*:\n"
+                                    msg = msg .. "  • Reportlar: `" .. (st.reports or 0) .. "`\n"
+                                    msg = msg .. "  • Jazolar: `" .. (st.punishments or 0) .. "`\n\n"
+                                end
+                                
+                                if not found then 
+                                    msg = msg .. "Hozircha bugungi statistika yig'ilmadi." 
+                                end
+                                
+                                sendTG(msg)
                                 
                             elseif low == "!spoff" then
                                 sendInput("/spoff")
@@ -1585,6 +1623,78 @@ function sampev.onServerMessage(color, text)
     
     if #web_logs > MAX_LOGS then 
         table.remove(web_logs, 1) 
+    end
+
+    -- ================= ADMINLAR STATISTIKASINI YIG'ISH =================
+    local ans_admin = clean:match("(%u%a+_%u%a+)%[%d+%]")
+    
+    if not ans_admin then
+        ans_admin = clean:match("(%u%a+_%u%a+)")
+    end
+    
+    if clean:find("ga javob berdi:") then
+        if ans_admin then
+            if not admin_statistics[ans_admin] then 
+                admin_statistics[ans_admin] = { 
+                    reports = 0, 
+                    punishments = 0 
+                } 
+            end
+            
+            admin_statistics[ans_admin].reports = admin_statistics[ans_admin].reports + 1
+            saveAdminStats()
+        end
+    end
+
+    if clean:find("jazoladi") or clean:find("jazo berdi") or clean:find("posadil") or clean:find("zabanil") or clean:find("kiknul") or clean:find("warn") or clean:find("mute") or clean:find("jail") or clean:find("ban") then
+        if ans_admin and ans_admin ~= bot_name then
+            if not admin_statistics[ans_admin] then 
+                admin_statistics[ans_admin] = { 
+                    reports = 0, 
+                    punishments = 0 
+                } 
+            end
+            
+            admin_statistics[ans_admin].punishments = admin_statistics[ans_admin].punishments + 1
+            saveAdminStats()
+        end
+    end
+
+    -- ================= MOSLASHUVCHAN ISM TANISH (FLEXIBLE NAME MATCHING) =================
+    local my_short_names = { 
+        "azim", 
+        "azimjon", 
+        "qariya" 
+    }
+    
+    local is_me_called = false
+    
+    for _, sname in ipairs(my_short_names) do
+        if lower_clean:find(sname) and not clean:find(bot_name) then
+            is_me_called = true
+            break
+        end
+    end
+
+    if is_me_called then
+        if clean:find("<ADM>") or clean:find("%[A%]") then
+            local adm_nm = clean:match("(%u%a+_%u%a+)%[%d+%]")
+            
+            if not adm_nm then
+                adm_nm = "Admin"
+            end
+            
+            sendTG("🚨 *Sizni chaqirishmoqda!* 🚨\n👤 *Kim:* `" .. tgSafe(adm_nm) .. "`\n💬 *Xabar:* `" .. tgSafe(clean) .. "`", true)
+            
+            newTask(function()
+                wait(math.random(20000, 30000))
+                local ai_reply = getAIChatReply(adm_nm .. " sizni chaqirdi: " .. clean, "admin")
+                
+                if ai_reply then 
+                    sendInput("/a " .. ai_reply) 
+                end
+            end)
+        end
     end
 
     -- ================= GRND_BOT ID QIDIRUV (ANTI-AFK UCHUN) =================
