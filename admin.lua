@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v9.7 - CHEKLOVSIZ JAVOB BERISH REJIMI) ===
+-- === KOD BOSHLANISHI (admin.lua v9.8 - FAQAT GRND_BOT SP VA AI FLASH) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -7,10 +7,9 @@ local requests = require("requests")
 local json = require("cjson")
 
 math.randomseed(os.time())
-local atan2 = math.atan2 or math.atan 
 
 -- ================= VERSIYA =================
-local script_version = 9.7
+local script_version = 9.8
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -80,13 +79,6 @@ local function saveAdminStats()
         ini.save(cfg, "settings\\config.txt")
     end)
 end
-
--- ================= AZ ZONE KOORDINATALARI =================
-local az_min_x = -745.7576
-local az_max_x = -696.5170
-local az_min_y = -2460.6765
-local az_max_y = -2411.3794
-local az_z = 1198.1488
 
 -- ================= LITSENZIYA =================
 local license_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/licenses.txt"
@@ -180,22 +172,12 @@ local sp_queue = {}
 local pending_admin_mirrors = {}
 
 local is_spectating = false
-local sp_timer = 0
-local is_wandering = false
-local wandering_enabled = true 
+local current_grnd_bot_id = nil
 local waiting_for_grnd_bot_id = false 
 local last_activity = os.time()
 
-local az_target_x = 0
-local az_target_y = 0
-local bot_state = "idle" 
-local state_timer = 0
-local angle = 0
-local current_speed = 0
-
-local is_hiding = false
-local sleep_end_time = 0
 local is_paused = false 
+local sleep_end_time = 0
 
 local tg_capture_timer = nil
 local is_mp_active = false
@@ -392,30 +374,6 @@ local function prunePending()
     end
 end
 
--- ================= AZ PATRUL (SMART MOVEMENT) =================
-function getNewAZTarget()
-    az_target_x = math.random() * (az_max_x - az_min_x) + az_min_x
-    az_target_y = math.random() * (az_max_y - az_min_y) + az_min_y
-end
-
-function startWandering()
-    getNewAZTarget()
-    bot_state = "run"
-    is_wandering = true
-    is_spectating = false
-    last_activity = os.time()
-    state_timer = os.time() + math.random(3, 8)
-end
-
-function stopWandering()
-    is_wandering = false
-    bot_state = "idle"
-end
-
-local function getDistance(x1, y1, x2, y2)
-    return math.sqrt((x2 - x1)^2 + (y2 - y1)^2)
-end
-
 -- ================= XOTIRA FUNKSIYALARI =================
 function bazaXato(reason)
     base_ok = false
@@ -574,7 +532,6 @@ function getFAQReply(text)
         return nil 
     end
     
-    -- Qoidalar bazasidan to'g'ridan-to'g'ri qidirish
     for keyword, desc in pairs(grnd_rules_database) do
         if lower:find(keyword, 1, true) then
             return "Assalomu alaykum, GRND qoidasiga ko'ra: " .. desc
@@ -1224,15 +1181,8 @@ function telegramPolling()
                                         wait(1000)
                                         spawn() 
                                         wait(1000)
-                                        
-                                        if wandering_enabled then
-                                            sendInput("/az")
-                                            is_spectating = false
-                                            startWandering()
-                                        else
-                                            waiting_for_grnd_bot_id = true
-                                            sendInput("/id grnd_bot")
-                                        end
+                                        waiting_for_grnd_bot_id = true
+                                        sendInput("/id grnd_bot")
                                     end)
                                 end
                                 
@@ -1240,7 +1190,6 @@ function telegramPolling()
                                 local menyu_text = "*MENYU (v" .. tostring(script_version) .. ")*\n\n"
                                 menyu_text = menyu_text .. "`/stats` - Hisobot\n"
                                 menyu_text = menyu_text .. "`!astats` - Adminlar statistikasi\n"
-                                menyu_text = menyu_text .. "`!run` - Yugurishni yoqish yoki o'chirish\n"
                                 menyu_text = menyu_text .. "`!admins` - Onlayn adminlar\n"
                                 menyu_text = menyu_text .. "`!spec [id]` - O'yinchini kuzatish\n"
                                 menyu_text = menyu_text .. "`!spoff` - Kuzatuvdan chiqish\n"
@@ -1252,27 +1201,6 @@ function telegramPolling()
                                 menyu_text = menyu_text .. "`!a [matn]` - Admin chat\n"
                                 menyu_text = menyu_text .. "`!status` - Bot holati"
                                 sendTG(menyu_text)
-                                
-                            elseif low == "!run" or low == "!patrul" then
-                                wandering_enabled = not wandering_enabled
-                                
-                                if wandering_enabled then
-                                    sendTG("🏃‍♂️ *Yugurish rejimi: YOQILDI.*\nBot endi AZ zonada patrul qiladi.")
-                                    newTask(function()
-                                        sendInput("/spoff")
-                                        wait(1000)
-                                        spawn()
-                                        wait(1000)
-                                        sendInput("/az")
-                                        is_spectating = false
-                                        startWandering()
-                                    end)
-                                else
-                                    sendTG("🛑 *Yugurish rejimi: O'CHIRILDI.*\n`grnd_bot` ID si qidirilmoqda (Anti-AFK uchun)...")
-                                    stopWandering()
-                                    waiting_for_grnd_bot_id = true
-                                    sendInput("/id grnd_bot")
-                                end
                                 
                             elseif low == "!astats" then
                                 local msg = "📊 *KUNLIK ADMINLAR STATISTIKASI:*\n\n"
@@ -1297,17 +1225,9 @@ function telegramPolling()
                                     wait(1000)
                                     spawn()
                                     wait(1000)
-                                    
-                                    if wandering_enabled then
-                                        sendInput("/az")
-                                        is_spectating = false
-                                        startWandering()
-                                        sendTG("✅ Kuzatuvdan chiqildi va AZ patrul davom etmoqda.")
-                                    else
-                                        waiting_for_grnd_bot_id = true
-                                        sendInput("/id grnd_bot")
-                                        sendTG("✅ Kuzatuvdan chiqildi. `grnd_bot` qidirilmoqda...")
-                                    end
+                                    waiting_for_grnd_bot_id = true
+                                    sendInput("/id grnd_bot")
+                                    sendTG("✅ Kuzatuvdan chiqildi. `grnd_bot` qayta qidirilmoqda...")
                                 end)
 
                             elseif low == "!admins" then
@@ -1349,9 +1269,7 @@ function telegramPolling()
                                 local spid = txt:match("^!spec%s+(%d+)")
                                 sendInput("/sp " .. spid)
                                 is_spectating = true
-                                sp_timer = os.time()
-                                stopWandering()
-                                sendTG("👁 `" .. spid .. "` ID kuzatuvga olindi (Spec).")
+                                sendTG("👁 `" .. spid .. "` ID vaqtinchalik kuzatuvga olindi (Spec).")
                                 
                             elseif txt:match("^!stats%s+(%d+)") then
                                 local tid = txt:match("^!stats%s+(%d+)")
@@ -1383,7 +1301,6 @@ function telegramPolling()
                             elseif low == "!pause" then
                                 is_paused = true
                                 sleep_end_time = 0
-                                stopWandering()
                                 botDisconnect()
                                 sendTG("⏸ *[TIZIM]* Bot to'xtatildi (Pause). Serverdan uzildi.\nYana ishga tushirish uchun `!unpause` deb yozing.")
                                 
@@ -1401,7 +1318,6 @@ function telegramPolling()
                                 
                                 if mins > 0 then
                                     sleep_end_time = os.time() + (mins * 60)
-                                    stopWandering()
                                     botDisconnect()
                                     sendTG("[PAUSE] Bot `" .. mins .. "` daqiqaga uxlaydi.")
                                     
@@ -1431,19 +1347,13 @@ function telegramPolling()
                                     status_msg = status_msg .. "SP: Yo'q\n"
                                 end
                                 
-                                if wandering_enabled then
-                                    status_msg = status_msg .. "Yugurish: Yoqilgan\n"
+                                if current_grnd_bot_id then
+                                    status_msg = status_msg .. "GRND_BOT SP: `ID " .. current_grnd_bot_id .. "`\n"
                                 else
-                                    status_msg = status_msg .. "Yugurish: O'chirilgan\n"
+                                    status_msg = status_msg .. "GRND_BOT SP: Qidirilmoqda...\n"
                                 end
                                 
-                                if is_wandering then
-                                    status_msg = status_msg .. "Harakat: Yugurmoqda\n"
-                                else
-                                    status_msg = status_msg .. "Harakat: To'xtagan\n"
-                                end
-                                
-                                status_msg = status_msg .. "Oxirgi harakat: `" .. idle .. "` soniya oldin\n"
+                                status_msg = status_msg .. "Oxirgi xabar: `" .. idle .. "` soniya oldin\n"
                                 
                                 if ai_busy then
                                     status_msg = status_msg .. "AI: Band\n"
@@ -1468,98 +1378,6 @@ function telegramPolling()
     end)
 end
 
--- ================= O'YIN ICHIDAGI SINKRONIZATSIYA (AZ PATRUL) =================
-function sampev.onSendPlayerSync(data)
-    if license_stopped or is_hiding or is_paused then 
-        return false 
-    end
-    
-    if is_wandering and wandering_enabled then
-        last_activity = os.time()
-        
-        local bx = data.position.x
-        local by = data.position.y
-        local bz = data.position.z
-        
-        if bx == 0 and by == 0 then 
-            return { data } 
-        end
-        
-        local dist = getDistance(bx, by, az_target_x, az_target_y)
-        
-        if dist < 1.5 or os.time() > state_timer then
-            getNewAZTarget()
-            local rand = math.random(1, 100)
-            
-            if rand < 25 then
-                bot_state = "idle"
-                state_timer = os.time() + math.random(2, 5)
-            else
-                if rand > 75 then
-                    bot_state = "sprint"
-                elseif rand > 35 then
-                    bot_state = "run"
-                else
-                    bot_state = "walk"
-                end
-                
-                state_timer = os.time() + math.random(5, 12)
-            end
-        end
-        
-        local want_jump = false
-        
-        if bot_state ~= "idle" and math.random(1, 100) > 95 then 
-            want_jump = true 
-        end
-        
-        if bot_state == "idle" then
-            if want_jump then
-                data.keysData = 32
-            else
-                data.keysData = 0
-            end
-            
-            data.moveSpeed.x = 0
-            data.moveSpeed.y = 0
-            data.moveSpeed.z = 0
-            current_speed = 0
-        else
-            local target_angle = atan2(az_target_y - by, az_target_x - bx)
-            angle = target_angle + (math.random() - 0.5) * 0.15 
-            
-            if bot_state == "sprint" then
-                if want_jump then
-                    data.keysData = 40
-                else
-                    data.keysData = 8
-                end
-                current_speed = 0.25
-            elseif bot_state == "run" then
-                if want_jump then
-                    data.keysData = 34
-                else
-                    data.keysData = 2
-                end
-                current_speed = 0.15
-            else
-                if want_jump then
-                    data.keysData = 34
-                else
-                    data.keysData = 2
-                end
-                current_speed = 0.08
-            end
-            
-            data.position.x = bx + math.cos(angle) * current_speed
-            data.position.y = by + math.sin(angle) * current_speed
-            data.position.z = az_z
-        end
-        
-        return { data }
-    end
-end
-
 -- ================= RPC KUZATUV DETEKTORI =================
 function sampev.onTogglePlayerSpectating(state)
     if is_paused or license_stopped then 
@@ -1568,21 +1386,15 @@ function sampev.onTogglePlayerSpectating(state)
     
     if state then
         is_spectating = true
-        stopWandering()
     else
         is_spectating = false
+        -- Agar qandaydir sabab bilan specdan chiqsa (server orqali), darhol qayta qidirishni boshlaydi
         newTask(function()
             wait(800)
             spawn() 
             wait(1200)
-            
-            if wandering_enabled then
-                sendInput("/az")
-                startWandering()
-            else
-                waiting_for_grnd_bot_id = true
-                sendInput("/id grnd_bot")
-            end
+            waiting_for_grnd_bot_id = true
+            sendInput("/id grnd_bot")
         end)
     end
 end
@@ -1592,6 +1404,8 @@ function sampev.onServerMessage(color, text)
     if license_stopped or is_paused then 
         return 
     end
+    
+    last_activity = os.time()
     
     local clean = tostring(text):gsub("{......}", "")
     local lower_clean = clean:lower()
@@ -1637,7 +1451,7 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- ================= GRND_BOT ID QIDIRUV (ANTI-AFK UCHUN) =================
+    -- ================= GRND_BOT ID QIDIRUV VA SP =================
     if waiting_for_grnd_bot_id then
         if lower_clean:find("grnd_bot") then
             local b_id = clean:match("grnd_bot%s*%[(%d+)%]")
@@ -1656,19 +1470,19 @@ function sampev.onServerMessage(color, text)
             
             if b_id then
                 waiting_for_grnd_bot_id = false
-                sendTG("✅ `grnd_bot` topildi (ID: " .. b_id .. "). Bot endi shuni kuzatib turadi.")
+                current_grnd_bot_id = b_id
+                sendTG("✅ `grnd_bot` topildi (ID: " .. b_id .. "). Bot endi shuni tinimsiz SP qiladi.")
                 
                 newTask(function()
                     wait(1000)
                     sendInput("/sp " .. b_id)
-                    is_spectating = true
-                    sp_timer = os.time() + 999999
                 end)
             end
             
         elseif lower_clean:find("topilmadi") or lower_clean:find("ne nayden") or lower_clean:find("not found") then
             waiting_for_grnd_bot_id = false
-            sendTG("⚠️ `grnd_bot` serverda topilmadi! Yugurish ham o'chirilgan, bot AFK ga tushib qolishi mumkin.")
+            current_grnd_bot_id = nil
+            sendTG("⚠️ `grnd_bot` serverda topilmadi! Bot specga kirmay turadi.")
         end
     end
 
@@ -1686,17 +1500,9 @@ function sampev.onServerMessage(color, text)
                     wait(500)
                     spawn() 
                     wait(1500)
-                    
-                    if wandering_enabled then
-                        sendInput("/az")
-                        is_spectating = false
-                        startWandering()
-                        sendTG("⚠️ *Anti-AFK Tizimi:* Bot AFK ("..total_sec.."s) deb topildi va AZ patrul orqali tiklandi!")
-                    else
-                        waiting_for_grnd_bot_id = true
-                        sendInput("/id grnd_bot")
-                        sendTG("⚠️ *Anti-AFK Tizimi:* Bot AFK ("..total_sec.."s) deb topildi va `grnd_bot` orqali tiklanmoqda!")
-                    end
+                    waiting_for_grnd_bot_id = true
+                    sendInput("/id grnd_bot")
+                    sendTG("⚠️ *Anti-AFK Tizimi:* Bot AFK ("..total_sec.."s) deb topildi. `grnd_bot` topib SP qilinmoqda!")
                 end)
             end
         end
@@ -1918,7 +1724,7 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- DOUBLE ANSWER HIMOYA TIZIMI (ENDI O'CHIRILGAN)
+    -- DOUBLE ANSWER HIMOYA TIZIMI 
     local tid, ans = nil, nil
     
     if clean:match("<ADM>.-%[%d+%]%s+.-%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)") then
@@ -1978,26 +1784,7 @@ function sampev.onServerMessage(color, text)
                     saveMemory()
                 end
             end
-            
-            -- DOUBLE ANSWER HIMOYA OLIB TASHLANDI
-            -- pending_reports[tid] = nil 
         end
-    end
-
-    local closed_id = nil
-    
-    if clean:match("Report%s+#?(%d+)%s+yopildi") then
-        closed_id = clean:match("Report%s+#?(%d+)%s+yopildi")
-    elseif clean:match("%[(%d+)%]%s+report.*yopildi") then
-        closed_id = clean:match("%[(%d+)%]%s+report.*yopildi")
-    elseif clean:match("^/re%s+(%d+)$") then
-        closed_id = clean:match("^/re%s+(%d+)$")
-    end
-    
-    if closed_id then
-        closed_id = tostring(closed_id)
-        -- REPORT YOPILSA HAM JAVOB BERISHI UCHUN BU YER HAM OLIB TASHLANDI
-        -- pending_reports[closed_id] = nil
     end
 
     -- ================= REPORTNI QABUL QILISH VA KUTISH =================
@@ -2057,9 +1844,6 @@ function sampev.onServerMessage(color, text)
                     if is_flipped then
                         wait(math.random(1500, 3000))
                         
-                        -- Endi bu qatorlar yo'q, bot hamma holatda o'z komandasini yuboradi
-                        -- if not pending_reports[q_id] then return end 
-                        
                         sendInput("/flip " .. q_id)
                         final_reply = "Assalomu alaykum, mashinangizni to'g'rilab qo'ydim. Ehtiyotkorroq haydang."
                         
@@ -2067,16 +1851,11 @@ function sampev.onServerMessage(color, text)
                         local text_len = string.len(q_text)
                         wait(math.random(2000, 4000) + (text_len * 20))
                         
-                        -- if not pending_reports[q_id] then return end 
-                        
                         final_reply = "Assalomu alaykum, server qoidalarini buzmang."
                         sendTG("⚠️ *DIQQAT! So'kinish ushlandi:*\n👤 O'yinchi: `" .. tgSafe(q_name) .. "`\n💬 Matn: `" .. tgSafe(q_text) .. "`", true)
                         
                     else
                         wait(report_delay * 1000)
-                        
-                        -- HIMOYA OLIB TASHLANDI: agar boshqa admin javob yozgan bo'lsa ham bot to'xtamaydi!
-                        -- if not pending_reports[q_id] then return end 
                         
                         final_reply = getSmartReply(q_text, q_name)
                         
@@ -2102,14 +1881,6 @@ QOIDALAR:
                     end
 
                     if pending_reports[q_id] then
-                        if final_reply and final_reply:find("kuzat") and not is_bad then
-                            local eid = q_text:match("(%d+)")
-                            
-                            if eid then 
-                                table.insert(sp_queue, eid) 
-                            end
-                        end
-                        
                         table.insert(report_queue, { id = q_id, reply = final_reply, name = q_name, text = q_text })
                     end
                 end)
@@ -2186,20 +1957,11 @@ function sampev.onShowDialog(id, style, title, button1, button2, text)
                 spawn()
                 wait(3000)
                 
-                if wandering_enabled then
-                    sendInput("/az") 
-                    wait(1500)
-                    sendInput("/acceptgnews")
-                    wait(2000)
-                    sendTG("🏃‍♂️ [OK] O'yinga kirdi va AZ zonada patrul boshladi!")
-                    startWandering()
-                else
-                    sendInput("/acceptgnews")
-                    wait(2000)
-                    waiting_for_grnd_bot_id = true
-                    sendInput("/id grnd_bot")
-                    sendTG("🏃‍♂️ [OK] O'yinga kirdi, `grnd_bot` qidirilmoqda...")
-                end
+                sendInput("/acceptgnews")
+                wait(2000)
+                waiting_for_grnd_bot_id = true
+                sendInput("/id grnd_bot")
+                sendTG("🏃‍♂️ [OK] O'yinga kirdi, `grnd_bot` qidirilmoqda...")
             end)
         end
         
@@ -2232,7 +1994,6 @@ end
 
 -- ================= ULANISH EVENTLARI =================
 function onConnectionClosed()
-    stopWandering()
     is_logged_in = false
     is_spectating = false
     sendTG("[NET] Bot serverdan uzildi.")
@@ -2376,7 +2137,6 @@ function onLoad()
             if tick % 300 == 0 then
                 if not licenseGuard() then
                     license_stopped = true
-                    stopWandering()
                     botDisconnect()
                     return
                 end
@@ -2388,33 +2148,21 @@ function onLoad()
             else
                 local idle = os.time() - last_activity
 
-                -- === KUZATISHDAN AZ ZONAGA QAYTISH YADA GRND_BOT NI QIDIRISH MANTIG'I ===
-                if is_spectating then
-                    -- Faqat yugurish yoqiq bo'lsagina ma'lum vaqtdan so'ng specdan o'zi chiqadi
-                    if wandering_enabled and os.time() - sp_timer > 90 then 
-                        sendInput("/spoff") 
-                        wait(1000)
-                        spawn() 
-                        wait(1000)
-                        sendInput("/az") 
-                        is_spectating = false
-                        startWandering() 
-                    end
-                elseif #sp_queue > 0 then
-                    local tid = table.remove(sp_queue, 1)
-                    sendInput("/sp " .. tid)
-                    is_spectating = true
-                    sp_timer = os.time()
-                    last_activity = os.time()
-                    stopWandering()
-                elseif not is_wandering and is_logged_in then
-                    -- Yugurish yoqiq bo'lsagina az patrul boshlaydi
-                    if wandering_enabled and idle > 5 then 
-                        sendInput("/az")
-                        startWandering() 
+                -- === SP DAN ADASHIB CHIQIB KETSA, QAYTA QIDIRISH MANTIG'I ===
+                if not is_spectating and is_logged_in and not waiting_for_grnd_bot_id then
+                    if idle > 15 then 
+                        waiting_for_grnd_bot_id = true
+                        sendInput("/id grnd_bot")
                     end
                 end
 
+                -- Qisqa kuzatuvlar uchun (masalan report yoki forma sp id kelganda)
+                if #sp_queue > 0 then
+                    local tid = table.remove(sp_queue, 1)
+                    sendInput("/sp " .. tid)
+                end
+
+                -- Report javoblari navbati
                 if #report_queue > 0 then
                     local task = table.remove(report_queue, 1)
                     
