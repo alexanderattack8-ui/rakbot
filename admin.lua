@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v9.8 - FAQAT GRND_BOT SP VA AI FLASH) ===
+-- === KOD BOSHLANISHI (admin.lua v9.9 - ANTI-BAN HIMOYA VA TO'LIQ NICK) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -9,7 +9,7 @@ local json = require("cjson")
 math.randomseed(os.time())
 
 -- ================= VERSIYA =================
-local script_version = 9.8
+local script_version = 9.9
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -154,7 +154,7 @@ local function licenseGuard()
     return false
 end
 
--- ================= FAYL YO'LLARI VA WEB APP =================
+-- ================= FAYL YO'LLARI =================
 local memory_file = "settings\\memory_base.json" 
 local old_memory_file = "settings\\" .. bot_name:lower() .. "_memory.json" 
 local faq_file = "settings\\faq_base.json"
@@ -853,7 +853,7 @@ function updateFAQFromWeb(manual)
     end)
 end
 
--- ================= AI FUNKSIYALARI (GEMINI 1.5 FLASH) =================
+-- ================= AI FUNKSIYALARI =================
 function askGemini(system_prompt, user_text)
     if gemini_key == "" or ai_busy then 
         return nil 
@@ -1388,7 +1388,6 @@ function sampev.onTogglePlayerSpectating(state)
         is_spectating = true
     else
         is_spectating = false
-        -- Agar qandaydir sabab bilan specdan chiqsa (server orqali), darhol qayta qidirishni boshlaydi
         newTask(function()
             wait(800)
             spawn() 
@@ -1620,37 +1619,56 @@ function sampev.onServerMessage(color, text)
         a_name, a_cmd, a_args = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(/[%w]+)%s+(.+)") 
     end
 
+    -- ================= ANTI-BAN HIMOYA VA TO'LIQ ISM FORMASI (YANGILANDI) =================
     if a_name and a_cmd and a_args and a_name ~= bot_name and not red_admins[a_name] then
         if allowed_cmds[a_cmd:lower()] then
-            local fl, ln = a_name:match("^(%a)%a+_(%a+)$")
+            local target_id = a_args:match("^(%d+)")
             
-            if fl and ln then
-                local cp = fl .. "." .. ln
-                local cc = a_cmd
-                local ca = a_args
-                local target_id = ca:match("^(%d+)")
+            if target_id then
+                -- Formani saqlash (bu safar qisqartma emas, to'liq a_name olinadi)
+                pending_admin_mirrors[target_id] = { cancelled = false, cmd = a_cmd, args = a_args, admin_name = a_name }
                 
-                if target_id then
-                    pending_admin_mirrors[target_id] = { cancelled = false }
+                newTask(function()
+                    -- Jazo berishdan oldin adminlarni tekshirish uchun serverga so'rov yuborish
+                    checking_admins_auto = true
+                    online_admins_table = {}
+                    sendInput("/admins")
                     
-                    newTask(function()
-                        wait(math.random(3000, 5000)) 
-                        local token = pending_admin_mirrors[target_id]
+                    wait(math.random(3000, 5000)) -- Server javobini kutamiz
+                    checking_admins_auto = false
+                    
+                    local token = pending_admin_mirrors[target_id]
+                    
+                    if token and not token.cancelled then
+                        local is_admin = false
                         
-                        if token and token.cancelled then
-                            sendTG("[FORMA] `" .. tgSafe(target_id) .. "` ID uchun ariza boshqa admin tomonidan qabul qilindi. Bekor qilindi.")
+                        -- Target ID rostdan ham adminkami?
+                        for _, adm in ipairs(online_admins_table) do
+                            if tostring(adm.id) == tostring(target_id) then
+                                is_admin = true
+                                break
+                            end
+                        end
+                        
+                        if is_admin then
+                            -- Agar admin bo'lsa, jazoni to'xtatib hazil qilish
+                            sendInput("/a " .. token.admin_name .. ", " .. target_id .. " id o'zimizning admin-ku? :)")
+                            sendTG("🛡 *ANTI-BAN HIMOYA:*\n`" .. tgSafe(token.admin_name) .. "` boshqa bir adminni (ID: `" .. target_id .. "`) jazolamoqchi bo'ldi. Jazo to'xtatildi va hazil javob qaytarildi!")
                         else
-                            sendInput(cc .. " " .. ca .. " // " .. cp)
+                            -- Agar admin bo'lmasa jazoni kiritish. TO'LIQ ISM bilan! (// Ivan_Vasilyev kabi)
+                            sendInput(token.cmd .. " " .. token.args .. " // " .. token.admin_name)
                             wait(1000)
                             sendInput("/a + " .. target_id) 
-                            sendTG("[JAZO - QABUL QILINDI]\n`" .. tgSafe(cc .. " " .. ca) .. "`")
+                            sendTG("✅ *[JAZO QABUL QILINDI]*\n👮‍♂️ Forma egasi: `" .. tgSafe(token.admin_name) .. "`\n🔨 Buyruq: `" .. tgSafe(token.cmd .. " " .. token.args) .. "`")
                         end
-                        
-                        if pending_admin_mirrors[target_id] == token then 
-                            pending_admin_mirrors[target_id] = nil 
-                        end
-                    end)
-                end
+                    elseif token and token.cancelled then
+                        sendTG("⚠️ *[FORMA BEKOR QILINDI]* `" .. tgSafe(target_id) .. "` ID uchun ariza boshqa admin tomonidan qabul qilindi.")
+                    end
+                    
+                    if pending_admin_mirrors[target_id] == token then 
+                        pending_admin_mirrors[target_id] = nil 
+                    end
+                end)
             end
         end
     end
@@ -2156,7 +2174,7 @@ function onLoad()
                     end
                 end
 
-                -- Qisqa kuzatuvlar uchun (masalan report yoki forma sp id kelganda)
+                -- Qisqa kuzatuvlar uchun
                 if #sp_queue > 0 then
                     local tid = table.remove(sp_queue, 1)
                     sendInput("/sp " .. tid)
