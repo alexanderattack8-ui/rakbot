@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v9.9 - ANTI-BAN HIMOYA VA TO'LIQ NICK) ===
+-- === KOD BOSHLANISHI (admin.lua v10.2 - DISCORD VA ANTI-BAN TO'LIQ VERSIYA) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -9,7 +9,7 @@ local json = require("cjson")
 math.randomseed(os.time())
 
 -- ================= VERSIYA =================
-local script_version = 9.9
+local script_version = 10.2
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -47,6 +47,8 @@ local cfg = ini.load({
         password = "",
         gemini_key = "",
         report_delay = "2",
+        discord_token = "",
+        discord_channel = "",
     },
     daily_logs = {
         start_time = os.time()
@@ -56,6 +58,9 @@ local cfg = ini.load({
     },
     faq_meta = {
         last_update = 0
+    },
+    discord_sync = { 
+        last_message_id = "0" 
     }
 }, "settings\\config.txt")
 
@@ -64,6 +69,9 @@ local bot_token = tostring(cfg.settings.token):match("^%s*(.-)%s*$") or ""
 local bot_chatid = tostring(cfg.settings.chatid):match("^%s*(.-)%s*$") or ""
 local gemini_key = tostring(cfg.settings.gemini_key):match("^%s*(.-)%s*$") or ""
 local report_delay = tonumber(cfg.settings.report_delay) or 2
+local discord_token = tostring(cfg.settings.discord_token):match("^%s*(.-)%s*$") or ""
+local discord_channel = tostring(cfg.settings.discord_channel):match("^%s*(.-)%s*$") or ""
+local last_discord_msg_id = tostring(cfg.discord_sync.last_message_id) or "0"
 
 -- Admin statistikasini xotiraga o'qish
 local admin_statistics = {}
@@ -76,6 +84,14 @@ end)
 local function saveAdminStats()
     pcall(function()
         cfg.admin_stats.data = json.encode(admin_statistics)
+        ini.save(cfg, "settings\\config.txt")
+    end)
+end
+
+local function saveDiscordState(msg_id)
+    pcall(function()
+        last_discord_msg_id = tostring(msg_id)
+        cfg.discord_sync.last_message_id = last_discord_msg_id
         ini.save(cfg, "settings\\config.txt")
     end)
 end
@@ -197,6 +213,10 @@ local checking_admins_auto = false
 local online_admins_table = {}
 local old_admins_table = {}
 local checking_stats_for_tg = false
+
+-- Discord Task Queue
+local discord_tasks = {}
+local active_d_task = nil
 
 local current_stat_id = nil
 local faq_last_update = tonumber(cfg.faq_meta.last_update) or 0
@@ -1082,6 +1102,90 @@ function getFallbackReply(rep_text)
     end
 end
 
+-- ================= DISCORD REAKSIYA FUNKSIYASI =================
+local function reactDiscord(msg_id, emoji_code)
+    if discord_token == "" or discord_channel == "" then return end
+    newTask(function()
+        local url = "https://discord.com/api/v10/channels/" .. discord_channel .. "/messages/" .. msg_id .. "/reactions/" .. emoji_code .. "/@me"
+        local headers = { ["Authorization"] = discord_token, ["Content-Type"] = "application/json" }
+        pcall(function() requests.put(url, {headers = headers, timeout = 5}) end)
+    end)
+end
+
+-- ================= DISCORD KUZATUVCHI (HAR 30 DAQIQADA) =================
+local function discordPolling()
+    if discord_token == "" or discord_channel == "" then return end
+    
+    newTask(function()
+        if last_discord_msg_id == "0" then
+            local url = "https://discord.com/api/v10/channels/" .. discord_channel .. "/messages?limit=1"
+            local headers = { ["Authorization"] = discord_token, ["Content-Type"] = "application/json" }
+            local ok, res = pcall(function() return requests.get(url, {headers = headers, timeout = 5}) end)
+            if ok and res and res.status_code == 200 then
+                local data = json.decode(res.text)
+                if data and #data > 0 then saveDiscordState(data[1].id) end
+            end
+        end
+
+        while true do
+            if is_logged_in and not is_paused then
+                local url = "https://discord.com/api/v10/channels/" .. discord_channel .. "/messages?limit=10"
+                local headers = { ["Authorization"] = discord_token, ["Content-Type"] = "application/json" }
+                local ok, res = pcall(function() return requests.get(url, {headers = headers, timeout = 5}) end)
+                
+                if ok and res and res.status_code == 200 then
+                    local data = json.decode(res.text)
+                    if data and #data > 0 then
+                        for i = #data, 1, -1 do
+                            local msg = data[i]
+                            if tonumber(msg.id) > tonumber(last_discord_msg_id) and not msg.author.bot then
+                                local text = msg.content
+                                if text:match("^/offban") or text:match("^/offwarn") or text:match("^/offmute") or text:match("^/offjail") or text:match("^/unban") then
+                                    table.insert(discord_tasks, { id = msg.id, text = text })
+                                end
+                                saveDiscordState(msg.id)
+                            end
+                        end
+                    end
+                end
+            end
+            wait(1800000) -- HAR 30 DAQIQADA (1800000 ms)
+        end
+    end)
+end
+
+-- ================= DISCORD TASKLARNI BAJARUVCHI (SMART QUEUE) =================
+local function discordTaskRunner()
+    newTask(function()
+        while true do
+            wait(1500)
+            if #discord_tasks > 0 and not active_d_task and is_logged_in and not is_paused then
+                active_d_task = table.remove(discord_tasks, 1)
+                active_d_task.step = "start"
+                active_d_task.timer = os.clock()
+                
+                local cmd, nick, rest = active_d_task.text:match("^/([%w_]+)%s+([%w_]+)%s+(.*)")
+                if cmd and nick and rest then
+                    active_d_task.cmd = cmd:lower()
+                    active_d_task.nick = nick
+                    active_d_task.rest = rest
+                    sendInput(active_d_task.text) 
+                    active_d_task.step = "wait_result"
+                else
+                    reactDiscord(active_d_task.id, "%xE2%x9D%x8C") 
+                    active_d_task = nil
+                end
+            end
+            
+            if active_d_task and (os.clock() - active_d_task.timer > 15.0) then
+                reactDiscord(active_d_task.id, "%xE2%x9D%x8C")
+                sendTG("⚠️ *Discord Forma Timeout (Server javob bermadi):*\n`" .. tgSafe(active_d_task.text) .. "`")
+                active_d_task = nil
+            end
+        end
+    end)
+end
+
 -- ================= TELEGRAM FUNKSIYALARI =================
 local tg_recent = {}
 local TG_DEDUPE = 90
@@ -1415,6 +1519,37 @@ function sampev.onServerMessage(color, text)
         table.remove(web_logs, 1) 
     end
 
+    -- ================= DISCORD FORMA TEKSHIRUVI =================
+    if active_d_task then
+        local lcl = lower_clean
+        if active_d_task.step == "wait_result" then
+            if lcl:find("o'yinda") or lcl:find("в игре") or lcl:find("v igre") then
+                active_d_task.step = "wait_id"; active_d_task.timer = os.clock(); sendInput("/id " .. active_d_task.nick)
+            elseif lcl:find("allaqachon") or lcl:find("oldin") or lcl:find("уже") or lcl:find("uje") then
+                reactDiscord(active_d_task.id, "%xE2%x9D%x8C"); sendTG("❌ *Rad Etildi (Oldin berilgan):*\n`" .. tgSafe(active_d_task.text) .. "`\n💬 *Server:* `" .. tgSafe(clean) .. "`"); active_d_task = nil
+            elseif lcl:find("topilmadi") or lcl:find("не найден") then
+                reactDiscord(active_d_task.id, "%xE2%x9D%x8C"); sendTG("❌ *Rad Etildi (O'yinchi topilmadi):*\n`" .. tgSafe(active_d_task.text) .. "`"); active_d_task = nil
+            elseif lcl:find(bot_name:lower()) and (lcl:find("jazoladi") or lcl:find("posadil") or lcl:find("zabanil") or lcl:find("mute") or lcl:find("warn")) then
+                reactDiscord(active_d_task.id, "%xE2%x9C%x85"); sendTG("✅ *Discord Forma Bajarildi (Offlayn):*\n`" .. tgSafe(active_d_task.text) .. "`"); active_d_task = nil
+            end
+        elseif active_d_task.step == "wait_id" then
+            local found_id = clean:match(active_d_task.nick .. "%s*%[(%d+)%]") or clean:match(active_d_task.nick .. "%s*%((%d+)%)")
+            if found_id then
+                local normal_cmd = active_d_task.cmd:gsub("^off", "") 
+                sendInput("/" .. normal_cmd .. " " .. found_id .. " " .. active_d_task.rest)
+                active_d_task.step = "wait_result_2"; active_d_task.timer = os.clock()
+            elseif lcl:find("topilmadi") or lcl:find("не найден") then
+                reactDiscord(active_d_task.id, "%xE2%x9D%x8C"); active_d_task = nil
+            end
+        elseif active_d_task.step == "wait_result_2" then
+            if lcl:find(bot_name:lower()) and (lcl:find("jazoladi") or lcl:find("posadil") or lcl:find("zabanil") or lcl:find("mute") or lcl:find("warn")) then
+                reactDiscord(active_d_task.id, "%xE2%x9C%x85"); sendTG("✅ *Discord Forma Bajarildi (ONLAYN ID orqali):*\n`" .. tgSafe(active_d_task.text) .. "`"); active_d_task = nil
+            elseif lcl:find("allaqachon") or lcl:find("oldin") or lcl:find("уже") then
+                reactDiscord(active_d_task.id, "%xE2%x9D%x8C"); sendTG("❌ *Rad Etildi (Allaqachon jazolangan):*\n`" .. tgSafe(active_d_task.text) .. "`"); active_d_task = nil
+            end
+        end
+    end
+
     -- ================= ADMINLAR STATISTIKASINI YIG'ISH =================
     local ans_admin = clean:match("(%u%a+_%u%a+)%[%d+%]")
     
@@ -1655,7 +1790,7 @@ function sampev.onServerMessage(color, text)
                             sendInput("/a " .. token.admin_name .. ", " .. target_id .. " id o'zimizning admin-ku? :)")
                             sendTG("🛡 *ANTI-BAN HIMOYA:*\n`" .. tgSafe(token.admin_name) .. "` boshqa bir adminni (ID: `" .. target_id .. "`) jazolamoqchi bo'ldi. Jazo to'xtatildi va hazil javob qaytarildi!")
                         else
-                            -- Agar admin bo'lmasa jazoni kiritish. TO'LIQ ISM bilan! (// Ivan_Vasilyev kabi)
+                            -- Agar admin bo'lmasa jazoni kiritish. TO'LIQ ISM bilan!
                             sendInput(token.cmd .. " " .. token.args .. " // " .. token.admin_name)
                             wait(1000)
                             sendInput("/a + " .. target_id) 
@@ -2056,6 +2191,12 @@ function onLoad()
     loadFAQFromFile()
     telegramPolling()
     checkUpdates()
+    
+    if discord_token ~= "" and discord_channel ~= "" then
+        discordPolling()
+        discordTaskRunner()
+        print("[DISCORD] Smart Self-Bot moduli ishga tushdi (30 daqiqalik interval)!")
+    end
 
     if os.time() - faq_last_update > FAQ_UPDATE_INTERVAL then 
         newTask(function() 
