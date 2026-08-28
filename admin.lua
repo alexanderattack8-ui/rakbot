@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v10.2 - DISCORD VA ANTI-BAN TO'LIQ VERSIYA) ===
+-- === KOD BOSHLANISHI (admin.lua v10.5 - TO'LIQ VERSIYA, STATUS VA DOUBLE-ANSWER HIMOYA) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -9,7 +9,7 @@ local json = require("cjson")
 math.randomseed(os.time())
 
 -- ================= VERSIYA =================
-local script_version = 10.2
+local script_version = 10.5
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -46,7 +46,7 @@ local cfg = ini.load({
         chatid = "",
         password = "",
         gemini_key = "",
-        report_delay = "2",
+        report_delay = "6",
         discord_token = "",
         discord_channel = "",
     },
@@ -68,7 +68,7 @@ local bot_name = tostring(cfg.settings.bot_name):match("^%s*(.-)%s*$") or ""
 local bot_token = tostring(cfg.settings.token):match("^%s*(.-)%s*$") or ""
 local bot_chatid = tostring(cfg.settings.chatid):match("^%s*(.-)%s*$") or ""
 local gemini_key = tostring(cfg.settings.gemini_key):match("^%s*(.-)%s*$") or ""
-local report_delay = tonumber(cfg.settings.report_delay) or 2
+local report_delay = tonumber(cfg.settings.report_delay) or 6
 local discord_token = tostring(cfg.settings.discord_token):match("^%s*(.-)%s*$") or ""
 local discord_channel = tostring(cfg.settings.discord_channel):match("^%s*(.-)%s*$") or ""
 local last_discord_msg_id = tostring(cfg.discord_sync.last_message_id) or "0"
@@ -213,6 +213,11 @@ local checking_admins_auto = false
 local online_admins_table = {}
 local old_admins_table = {}
 local checking_stats_for_tg = false
+
+-- STATUS UCHUN O'ZGARUVCHILAR
+local ai_last_error = "Xato yo'q"
+local discord_status_text = "O'chiq"
+local discord_last_check = "Tekshirilmagan"
 
 -- Discord Task Queue
 local discord_tasks = {}
@@ -915,8 +920,10 @@ function askGemini(system_prompt, user_text)
     
     ai_busy = false
     
+    -- AI ERROR STATUS UPDATE
     if ok and response then
         if response.status_code == 200 then
+            ai_last_error = "Xato yo'q (Ishlayapti)"
             local okd, data = pcall(json.decode, response.text)
             
             if okd and data and data.candidates and data.candidates[1] and data.candidates[1].content and data.candidates[1].content.parts and data.candidates[1].content.parts[1] then
@@ -924,7 +931,11 @@ function askGemini(system_prompt, user_text)
                 out_text = out_text:gsub("\n", " ")
                 return out_text
             end
+        else
+            ai_last_error = "API Xato kod: " .. tostring(response.status_code)
         end
+    else
+        ai_last_error = "Internet yoki server ulanishida xatolik"
     end
     
     return nil
@@ -1129,11 +1140,15 @@ local function discordPolling()
 
         while true do
             if is_logged_in and not is_paused then
+                discord_last_check = os.date("%H:%M:%S")
                 local url = "https://discord.com/api/v10/channels/" .. discord_channel .. "/messages?limit=10"
                 local headers = { ["Authorization"] = discord_token, ["Content-Type"] = "application/json" }
                 local ok, res = pcall(function() return requests.get(url, {headers = headers, timeout = 5}) end)
                 
-                if ok and res and res.status_code == 200 then
+                if not ok or not res then
+                    discord_status_text = "Ulanish xatosi (Internet)"
+                elseif res.status_code == 200 then
+                    discord_status_text = "Faol (Normal)"
                     local data = json.decode(res.text)
                     if data and #data > 0 then
                         for i = #data, 1, -1 do
@@ -1147,6 +1162,10 @@ local function discordPolling()
                             end
                         end
                     end
+                elseif res.status_code == 401 then
+                    discord_status_text = "Xato (Token noto'g'ri!)"
+                else
+                    discord_status_text = "Xato kod: " .. tostring(res.status_code)
                 end
             end
             wait(1800000) -- HAR 30 DAQIQADA (1800000 ms)
@@ -1459,19 +1478,18 @@ function telegramPolling()
                                 
                                 status_msg = status_msg .. "Oxirgi xabar: `" .. idle .. "` soniya oldin\n"
                                 
-                                if ai_busy then
-                                    status_msg = status_msg .. "AI: Band\n"
-                                else
-                                    status_msg = status_msg .. "AI: Tayyor\n"
-                                end
-                                
                                 if is_paused then
                                     status_msg = status_msg .. "Pauza holati: To'xtatilgan\n"
                                 else
                                     status_msg = status_msg .. "Pauza holati: Ishlamoqda\n"
                                 end
                                 
-                                status_msg = status_msg .. "Kutish vaqti: `" .. report_delay .. "`s"
+                                status_msg = status_msg .. "Kutish vaqti: `" .. report_delay .. "`s\n\n"
+                                
+                                -- Status update'lar qo'shilgan joy
+                                status_msg = status_msg .. "🤖 *AI (Gemini) Holati:*\n`" .. ai_last_error .. "`\n\n"
+                                status_msg = status_msg .. "💬 *Discord (Self-Bot) Holati:*\nStatus: `" .. discord_status_text .. "`\nOxirgi tekshiruv: `" .. discord_last_check .. "`"
+                                
                                 sendTG(status_msg)
                             end
                         end
@@ -1754,22 +1772,21 @@ function sampev.onServerMessage(color, text)
         a_name, a_cmd, a_args = clean:match("%[A%] (%a+_%a+)%[%d+%]:%s*(/[%w]+)%s+(.+)") 
     end
 
-    -- ================= ANTI-BAN HIMOYA VA TO'LIQ ISM FORMASI (YANGILANDI) =================
+    -- ================= ANTI-BAN HIMOYA VA TO'LIQ ISM FORMASI =================
     if a_name and a_cmd and a_args and a_name ~= bot_name and not red_admins[a_name] then
         if allowed_cmds[a_cmd:lower()] then
             local target_id = a_args:match("^(%d+)")
             
             if target_id then
-                -- Formani saqlash (bu safar qisqartma emas, to'liq a_name olinadi)
+                -- Formani saqlash 
                 pending_admin_mirrors[target_id] = { cancelled = false, cmd = a_cmd, args = a_args, admin_name = a_name }
                 
                 newTask(function()
-                    -- Jazo berishdan oldin adminlarni tekshirish uchun serverga so'rov yuborish
                     checking_admins_auto = true
                     online_admins_table = {}
                     sendInput("/admins")
                     
-                    wait(math.random(3000, 5000)) -- Server javobini kutamiz
+                    wait(math.random(3000, 5000)) 
                     checking_admins_auto = false
                     
                     local token = pending_admin_mirrors[target_id]
@@ -1777,7 +1794,6 @@ function sampev.onServerMessage(color, text)
                     if token and not token.cancelled then
                         local is_admin = false
                         
-                        -- Target ID rostdan ham adminkami?
                         for _, adm in ipairs(online_admins_table) do
                             if tostring(adm.id) == tostring(target_id) then
                                 is_admin = true
@@ -1786,11 +1802,9 @@ function sampev.onServerMessage(color, text)
                         end
                         
                         if is_admin then
-                            -- Agar admin bo'lsa, jazoni to'xtatib hazil qilish
                             sendInput("/a " .. token.admin_name .. ", " .. target_id .. " id o'zimizning admin-ku? :)")
                             sendTG("🛡 *ANTI-BAN HIMOYA:*\n`" .. tgSafe(token.admin_name) .. "` boshqa bir adminni (ID: `" .. target_id .. "`) jazolamoqchi bo'ldi. Jazo to'xtatildi va hazil javob qaytarildi!")
                         else
-                            -- Agar admin bo'lmasa jazoni kiritish. TO'LIQ ISM bilan!
                             sendInput(token.cmd .. " " .. token.args .. " // " .. token.admin_name)
                             wait(1000)
                             sendInput("/a + " .. target_id) 
@@ -1877,7 +1891,7 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- DOUBLE ANSWER HIMOYA TIZIMI 
+    -- ================= DOUBLE ANSWER HIMOYA TIZIMI (YANGILANGAN) =================
     local tid, ans = nil, nil
     
     if clean:match("<ADM>.-%[%d+%]%s+.-%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)") then
@@ -1937,6 +1951,9 @@ function sampev.onServerMessage(color, text)
                     saveMemory()
                 end
             end
+            
+            -- SHU YERDA BOT O'Z NAVBATINI O'CHIRADI (BOSHQA ADMIN JAVOB BERDI)
+            pending_reports[tid] = nil
         end
     end
 
@@ -2010,25 +2027,28 @@ function sampev.onServerMessage(color, text)
                     else
                         wait(report_delay * 1000)
                         
-                        final_reply = getSmartReply(q_text, q_name)
-                        
-                        if not final_reply then
-                            local prompt = string.format([[Siz SA-MP serverida "%s" ismli administratorsiz. O'yinchi savoli: "%s".
+                        -- AGAR HECH KIM JAVOB BERMAGAN BO'LSA
+                        if pending_reports[q_id] then
+                            final_reply = getSmartReply(q_text, q_name)
+                            
+                            if not final_reply then
+                                local prompt = string.format([[Siz SA-MP serverida "%s" ismli administratorsiz. O'yinchi savoli: "%s".
 QOIDALAR:
 1. Bitta gapda, qisqa o'zbek tilida javob bering. Har doim bir xil salomlashmang.
 2. O'yinchilar uchun / (slash) bilan yoziladigan buyruqlar UMMUMAN YO'Q! Shuning uchun hech qachon /komanda (masalan /works, /gps, /donate) maslahat bermang.
 3. Link ishlatmang.]], bot_name, q_text)
-                            
-                            final_reply = askGemini(prompt, q_text)
-                            
-                            if final_reply then 
-                                final_reply = final_reply:gsub("https?://[%S]+", "")
-                                final_reply = final_reply:gsub("%s+", " ")
-                                final_reply = final_reply:match("^%s*(.-)%s*$") 
-                            end
-                            
-                            if not final_reply or final_reply == "" or string.len(final_reply) < 4 then 
-                                final_reply = getFallbackReply(q_text) 
+                                
+                                final_reply = askGemini(prompt, q_text)
+                                
+                                if final_reply then 
+                                    final_reply = final_reply:gsub("https?://[%S]+", "")
+                                    final_reply = final_reply:gsub("%s+", " ")
+                                    final_reply = final_reply:match("^%s*(.-)%s*$") 
+                                end
+                                
+                                if not final_reply or final_reply == "" or string.len(final_reply) < 4 then 
+                                    final_reply = getFallbackReply(q_text) 
+                                end
                             end
                         end
                     end
@@ -2342,6 +2362,9 @@ function onLoad()
                         pcall(function() 
                             ini.save(cfg, "settings\\config.txt") 
                         end)
+                        
+                        -- JAVOB BERGANDAN KEYIN BO'SHATAMIZ (TOZALASH)
+                        pending_reports[task.id] = nil
 
                         wait(500)
                         sendInput("/re " .. tostring(task.id))
