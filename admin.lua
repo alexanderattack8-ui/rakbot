@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v10.5 - TO'LIQ VERSIYA, STATUS VA DOUBLE-ANSWER HIMOYA) ===
+-- === KOD BOSHLANISHI (admin.lua v10.7 - DOIM JAVOB BERADIGAN VERSIYA) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -9,7 +9,7 @@ local json = require("cjson")
 math.randomseed(os.time())
 
 -- ================= VERSIYA =================
-local script_version = 10.5
+local script_version = 10.7
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -46,7 +46,7 @@ local cfg = ini.load({
         chatid = "",
         password = "",
         gemini_key = "",
-        report_delay = "6",
+        report_delay = "2",
         discord_token = "",
         discord_channel = "",
     },
@@ -68,7 +68,7 @@ local bot_name = tostring(cfg.settings.bot_name):match("^%s*(.-)%s*$") or ""
 local bot_token = tostring(cfg.settings.token):match("^%s*(.-)%s*$") or ""
 local bot_chatid = tostring(cfg.settings.chatid):match("^%s*(.-)%s*$") or ""
 local gemini_key = tostring(cfg.settings.gemini_key):match("^%s*(.-)%s*$") or ""
-local report_delay = tonumber(cfg.settings.report_delay) or 6
+local report_delay = tonumber(cfg.settings.report_delay) or 2
 local discord_token = tostring(cfg.settings.discord_token):match("^%s*(.-)%s*$") or ""
 local discord_channel = tostring(cfg.settings.discord_channel):match("^%s*(.-)%s*$") or ""
 local last_discord_msg_id = tostring(cfg.discord_sync.last_message_id) or "0"
@@ -1478,6 +1478,12 @@ function telegramPolling()
                                 
                                 status_msg = status_msg .. "Oxirgi xabar: `" .. idle .. "` soniya oldin\n"
                                 
+                                if ai_busy then
+                                    status_msg = status_msg .. "AI: Band\n"
+                                else
+                                    status_msg = status_msg .. "AI: Tayyor\n"
+                                end
+                                
                                 if is_paused then
                                     status_msg = status_msg .. "Pauza holati: To'xtatilgan\n"
                                 else
@@ -1778,7 +1784,6 @@ function sampev.onServerMessage(color, text)
             local target_id = a_args:match("^(%d+)")
             
             if target_id then
-                -- Formani saqlash 
                 pending_admin_mirrors[target_id] = { cancelled = false, cmd = a_cmd, args = a_args, admin_name = a_name }
                 
                 newTask(function()
@@ -1786,7 +1791,7 @@ function sampev.onServerMessage(color, text)
                     online_admins_table = {}
                     sendInput("/admins")
                     
-                    wait(math.random(3000, 5000)) 
+                    wait(math.random(3000, 5000))
                     checking_admins_auto = false
                     
                     local token = pending_admin_mirrors[target_id]
@@ -1891,7 +1896,7 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- ================= DOUBLE ANSWER HIMOYA TIZIMI (YANGILANGAN) =================
+    -- BOSHQA ADMIN JAVOBIDAN O'RGANISH (Lekin navbatni o'chirmaydi)
     local tid, ans = nil, nil
     
     if clean:match("<ADM>.-%[%d+%]%s+.-%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)") then
@@ -1952,8 +1957,8 @@ function sampev.onServerMessage(color, text)
                 end
             end
             
-            -- SHU YERDA BOT O'Z NAVBATINI O'CHIRADI (BOSHQA ADMIN JAVOB BERDI)
-            pending_reports[tid] = nil
+            -- HIMOYA O'CHIRILDI: Boshqa admin javob bersa ham bot javob berishda davom etadi.
+            -- pending_reports[tid] = nil 
         end
     end
 
@@ -2005,7 +2010,9 @@ function sampev.onServerMessage(color, text)
                 newTask(function()
                     if is_mp_active then
                         wait(math.random(4000, 7000))
-                        table.insert(report_queue, { id = q_id, reply = "Assalomu aleykum, iltimos kuting.", name = q_name, text = q_text })
+                        if pending_reports[q_id] then
+                            table.insert(report_queue, { id = q_id, reply = "Assalomu aleykum, iltimos kuting.", name = q_name, text = q_text })
+                        end
                         return
                     end
 
@@ -2025,9 +2032,10 @@ function sampev.onServerMessage(color, text)
                         sendTG("⚠️ *DIQQAT! So'kinish ushlandi:*\n👤 O'yinchi: `" .. tgSafe(q_name) .. "`\n💬 Matn: `" .. tgSafe(q_text) .. "`", true)
                         
                     else
+                        -- BELGILANGAN VAQT (Masalan 2 soniya) KUTADI
                         wait(report_delay * 1000)
                         
-                        -- AGAR HECH KIM JAVOB BERMAGAN BO'LSA
+                        -- DOIM JAVOB BERADI
                         if pending_reports[q_id] then
                             final_reply = getSmartReply(q_text, q_name)
                             
@@ -2053,7 +2061,8 @@ QOIDALAR:
                         end
                     end
 
-                    if pending_reports[q_id] then
+                    -- JAVOB TAYYOR BO'LSA NAVBATGA QO'SHADI
+                    if final_reply and pending_reports[q_id] then
                         table.insert(report_queue, { id = q_id, reply = final_reply, name = q_name, text = q_text })
                     end
                 end)
@@ -2362,8 +2371,8 @@ function onLoad()
                         pcall(function() 
                             ini.save(cfg, "settings\\config.txt") 
                         end)
-                        
-                        -- JAVOB BERGANDAN KEYIN BO'SHATAMIZ (TOZALASH)
+
+                        -- O'ZIMIZ JAVOB BERGANDAN KEYIN HAM BAZADAN TOZALAYMIZ
                         pending_reports[task.id] = nil
 
                         wait(500)
