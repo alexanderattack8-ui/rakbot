@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v10.7 - DOIM JAVOB BERADIGAN VERSIYA) ===
+-- === KOD BOSHLANISHI (admin.lua v10.9 - SMART COPY & REPLY SYSTEM) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -9,7 +9,7 @@ local json = require("cjson")
 math.randomseed(os.time())
 
 -- ================= VERSIYA =================
-local script_version = 10.7
+local script_version = 10.9
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -920,7 +920,6 @@ function askGemini(system_prompt, user_text)
     
     ai_busy = false
     
-    -- AI ERROR STATUS UPDATE
     if ok and response then
         if response.status_code == 200 then
             ai_last_error = "Xato yo'q (Ishlayapti)"
@@ -984,7 +983,6 @@ function getSmartReply(text, sender_name)
     end
 
     local faq_reply = getFAQReply(text)
-    
     if faq_reply then
         local clean = tostring(faq_reply)
         clean = clean:gsub("https?://[%S]+", "")
@@ -992,7 +990,11 @@ function getSmartReply(text, sender_name)
         clean = clean:match("^%s*(.-)%s*$")
         
         if clean and clean:len() > 10 then 
-            return "Assalomu alaykum, " .. clean:sub(1, 200) 
+            if clean:find("Assalomu alaykum") then
+                return clean:sub(1, 140) 
+            else
+                return "Assalomu alaykum, " .. clean:sub(1, 120)
+            end
         end
     end
 
@@ -1079,13 +1081,11 @@ function getSmartReply(text, sender_name)
     end
 
     local trusted_reply = searchMemory(true)
-    
     if trusted_reply then 
         return trusted_reply 
     end
     
     local normal_reply = searchMemory(false)
-    
     if normal_reply then 
         return normal_reply 
     end
@@ -1123,7 +1123,7 @@ local function reactDiscord(msg_id, emoji_code)
     end)
 end
 
--- ================= DISCORD KUZATUVCHI (HAR 30 DAQIQADA) =================
+-- ================= DISCORD KUZATUVCHI =================
 local function discordPolling()
     if discord_token == "" or discord_channel == "" then return end
     
@@ -1168,12 +1168,12 @@ local function discordPolling()
                     discord_status_text = "Xato kod: " .. tostring(res.status_code)
                 end
             end
-            wait(1800000) -- HAR 30 DAQIQADA (1800000 ms)
+            wait(1800000) 
         end
     end)
 end
 
--- ================= DISCORD TASKLARNI BAJARUVCHI (SMART QUEUE) =================
+-- ================= DISCORD TASKLARNI BAJARUVCHI =================
 local function discordTaskRunner()
     newTask(function()
         while true do
@@ -1492,7 +1492,6 @@ function telegramPolling()
                                 
                                 status_msg = status_msg .. "Kutish vaqti: `" .. report_delay .. "`s\n\n"
                                 
-                                -- Status update'lar qo'shilgan joy
                                 status_msg = status_msg .. "🤖 *AI (Gemini) Holati:*\n`" .. ai_last_error .. "`\n\n"
                                 status_msg = status_msg .. "💬 *Discord (Self-Bot) Holati:*\nStatus: `" .. discord_status_text .. "`\nOxirgi tekshiruv: `" .. discord_last_check .. "`"
                                 
@@ -1896,7 +1895,7 @@ function sampev.onServerMessage(color, text)
         end
     end
 
-    -- BOSHQA ADMIN JAVOBIDAN O'RGANISH (Lekin navbatni o'chirmaydi)
+    -- ================= BOSHQA ADMINLAR JAVOBINI O'G'IRLASH (COPY CAT) =================
     local tid, ans = nil, nil
     
     if clean:match("<ADM>.-%[%d+%]%s+.-%[(%d+)%]%s+ga%s+javob%s+berdi:%s*(.+)") then
@@ -1931,6 +1930,7 @@ function sampev.onServerMessage(color, text)
                 javob = javob:match("^%s*(.-)%s*$") or ans
                 
                 if savol ~= "" and javob ~= "" then
+                    -- BAZAGA O'RGANISH UCHUN SAQLASH
                     if not bot_memory[savol] then 
                         bot_memory[savol] = {} 
                     end
@@ -1941,24 +1941,22 @@ function sampev.onServerMessage(color, text)
                     end
                     
                     local trusted_flag = false
-                    
-                    if is_red_ans then
-                        trusted_flag = true
-                    end
+                    if is_red_ans then trusted_flag = true end
                     
                     local fallback_admin = "?"
-                    
-                    if ans_admin then
-                        fallback_admin = ans_admin
-                    end
+                    if ans_admin then fallback_admin = ans_admin end
                     
                     table.insert(bot_memory[savol], { answer = javob, admin = fallback_admin, time = os.time(), trusted = trusted_flag })
                     saveMemory()
+                    
+                    -- YOKI SHU ZAXOTI O'ZIDAN FOYDALANISH UCHUN "COLLECTED ANSWERS" GA SOLISH
+                    if not pend.collected_answers then pend.collected_answers = {} end
+                    table.insert(pend.collected_answers, javob)
                 end
             end
             
-            -- HIMOYA O'CHIRILDI: Boshqa admin javob bersa ham bot javob berishda davom etadi.
-            -- pending_reports[tid] = nil 
+            -- DIQQAT: Bot boshqa odam javob yozsa ham indamay to'xtatmaydi, 
+            -- pend larni o'chirmaymiz va u navbati kelganda albatta o'g'irlab olganini yuboradi!
         end
     end
 
@@ -1982,18 +1980,16 @@ function sampev.onServerMessage(color, text)
             rep_id = tostring(rep_id)
             
             local clean_rep_text = rep_text:match("^%s*(.-)%s*$")
-            
-            if clean_rep_text then
-                rep_text = clean_rep_text
-            end
+            if clean_rep_text then rep_text = clean_rep_text end
             
             prunePending()
             
-            pending_reports[rep_id] = { text = rep_text, time = os.time() }
+            -- REPORT KELGANDA "COLLECTED ANSWERS" LISTINI HAM OCHIB QO'YAMIZ
+            pending_reports[rep_id] = { text = rep_text, time = os.time(), collected_answers = {} }
             sendTG("🔔 *YANGI REPORT KELDI!*\n👤 O'yinchi: `" .. tgSafe(rep_name) .. "` (ID: " .. rep_id .. ")\n💬 Matn: `" .. tgSafe(rep_text) .. "`")
 
             local lower_rep = rep_text:lower():match("^%s*(.-)%s*$") or ""
-            local is_plus = (lower_rep:match("^[+%s]+$") ~= nil)
+            local is_plus = (lower_rep:match("^[+%s]+$") ~= nil) -- "+" MATNLI REPORTNI TOPISH
             
             local is_flipped = false
             if lower_rep:find("ag'dar") or lower_rep:find("agdar") or lower_rep:find("to'ntar") or lower_rep:find("tontar") or lower_rep:find("flip") or lower_rep:find("korjom") or lower_rep:find("g'ildirak") then
@@ -2002,6 +1998,7 @@ function sampev.onServerMessage(color, text)
             
             local is_bad = containsBadWord(rep_text) 
 
+            -- "+" DAN TASHQARI HAMMASIGA JAVOB BERADI
             if not is_plus then
                 local q_id = rep_id
                 local q_name = rep_name
@@ -2032,30 +2029,36 @@ function sampev.onServerMessage(color, text)
                         sendTG("⚠️ *DIQQAT! So'kinish ushlandi:*\n👤 O'yinchi: `" .. tgSafe(q_name) .. "`\n💬 Matn: `" .. tgSafe(q_text) .. "`", true)
                         
                     else
-                        -- BELGILANGAN VAQT (Masalan 2 soniya) KUTADI
+                        -- BELGILANGAN VAQT (Masalan 2 soniya) KUTADI, BO'SH VAQTIDA BOSHQA ADMINLAR YOZISHI KUTILMOQDA
                         wait(report_delay * 1000)
                         
-                        -- DOIM JAVOB BERADI
-                        if pending_reports[q_id] then
-                            final_reply = getSmartReply(q_text, q_name)
-                            
-                            if not final_reply then
-                                local prompt = string.format([[Siz SA-MP serverida "%s" ismli administratorsiz. O'yinchi savoli: "%s".
+                        local current_pend = pending_reports[q_id]
+                        if current_pend then
+                            -- AGAR KUTISH VAQTIDA KIMDIR JAVOB BERGAN BO'LSA, ULARNING JAVOBINI RANDOM TANLAB YUBORADI
+                            if current_pend.collected_answers and #current_pend.collected_answers > 0 then
+                                final_reply = current_pend.collected_answers[math.random(1, #current_pend.collected_answers)]
+                            else
+                                -- AGAR HECH KIM JAVOB BERMAGAN BO'LSA O'Z BAZASIGA/AIGA MUROJAAT QILADI
+                                final_reply = getSmartReply(q_text, q_name)
+                                
+                                if not final_reply then
+                                    local prompt = string.format([[Siz SA-MP serverida "%s" ismli administratorsiz. O'yinchi savoli: "%s".
 QOIDALAR:
 1. Bitta gapda, qisqa o'zbek tilida javob bering. Har doim bir xil salomlashmang.
 2. O'yinchilar uchun / (slash) bilan yoziladigan buyruqlar UMMUMAN YO'Q! Shuning uchun hech qachon /komanda (masalan /works, /gps, /donate) maslahat bermang.
 3. Link ishlatmang.]], bot_name, q_text)
-                                
-                                final_reply = askGemini(prompt, q_text)
-                                
-                                if final_reply then 
-                                    final_reply = final_reply:gsub("https?://[%S]+", "")
-                                    final_reply = final_reply:gsub("%s+", " ")
-                                    final_reply = final_reply:match("^%s*(.-)%s*$") 
-                                end
-                                
-                                if not final_reply or final_reply == "" or string.len(final_reply) < 4 then 
-                                    final_reply = getFallbackReply(q_text) 
+                                    
+                                    final_reply = askGemini(prompt, q_text)
+                                    
+                                    if final_reply then 
+                                        final_reply = final_reply:gsub("https?://[%S]+", "")
+                                        final_reply = final_reply:gsub("%s+", " ")
+                                        final_reply = final_reply:match("^%s*(.-)%s*$") 
+                                    end
+                                    
+                                    if not final_reply or final_reply == "" or string.len(final_reply) < 4 then 
+                                        final_reply = getFallbackReply(q_text) 
+                                    end
                                 end
                             end
                         end
