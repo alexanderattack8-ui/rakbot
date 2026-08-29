@@ -1,4 +1,4 @@
--- === KOD BOSHLANISHI (admin.lua v10.9 - SMART COPY & REPLY SYSTEM) ===
+-- === KOD BOSHLANISHI (admin.lua v11.0 - SMART CLEANUP & PERFECT COPY CAT) ===
 require("addon")
 local updater = require("updater")
 local sampev = require("samp.events")
@@ -9,7 +9,7 @@ local json = require("cjson")
 math.randomseed(os.time())
 
 -- ================= VERSIYA =================
-local script_version = 10.9
+local script_version = 11.0
 local script_name_file = "admin.lua"
 local update_info_url = "https://raw.githubusercontent.com/alexanderattack8-ui/rakbot/main/version.json"
 
@@ -241,7 +241,7 @@ local red_admins = {
     ["Maga_By"] = true
 }
 
--- ================= GRND RASMIY QOIDALAR BAZASI (TO'LIQ) =================
+-- ================= GRND RASMIY QOIDALAR BAZASI =================
 local grnd_rules_database = {
     ["1.2"] = "Akkaunt yoki shaxsni ma'muriyat/dasturchi deb ko'rsatish: 3-7 kun ban. Jiddiy holatda 31 kun ban.",
     ["1.3"] = "Qoidalardagi bo'shliqlardan foydalanishga urinish: 3-31 kun ban.",
@@ -315,11 +315,39 @@ local function containsBadWord(text)
     return false
 end
 
+-- ================= FORMATTER (CLEAN REPLIES) =================
+local function formatFinalReply(text)
+    if not text or text == "" then return nil end
+    local txt = tostring(text)
+    
+    -- Havolalarni tozalash
+    txt = txt:gsub("https?://[%S]+", "")
+    
+    -- Agar oldin saqlanib qolgan Assalomu alaykum va rang kodlari bo'lsa barchasini tozalaymiz
+    for i=1, 3 do
+        txt = txt:gsub("^[Aa]ssalomu?%s+[Aa]l[ae]ykum%s*[,%.%s]*", "")
+        txt = txt:gsub("^[Aa]ssalom[%s,%.]*", "")
+        txt = txt:gsub("^[Ss]alom[%s,%.]*", "")
+        txt = txt:gsub("^{%x%x%x%x%x%x}%s*", "") 
+    end
+    
+    txt = txt:gsub("%s+", " ")
+    txt = txt:match("^%s*(.-)%s*$")
+    
+    if txt and txt:len() > 0 then
+        -- Birinchi harfni katta qilib qo'yish
+        txt = txt:sub(1,1):upper() .. txt:sub(2)
+        -- SAMP chat limiti (128 char) hisobga olingan holda (18 char + 105 char)
+        return "Assalomu alaykum, " .. txt:sub(1, 105)
+    end
+    return nil
+end
+
 -- ================= AVTOMATIK JAVOBLAR =================
-local REP_EVAK = "Assalomu aleykum, spidometrdagi evakuator tugmasini bosing."
-local REP_SHIK = "Assalomu aleykum, dalil bilan shikoyat yozing."
-local REP_WARN = "Assalomu alaykum, planshet orqali yoki statistika bo'limidan bilib olishingiz mumkin."
-local REP_NAVI = "Assalomu alaykum, planshetni ochib navigator tugmasini bosing."
+local REP_EVAK = "Spidometrdagi evakuator tugmasini bosing."
+local REP_SHIK = "Dalil bilan shikoyat yozing."
+local REP_WARN = "Planshet orqali yoki statistika bo'limidan bilib olishingiz mumkin."
+local REP_NAVI = "Planshetni ochib navigator tugmasini bosing."
 
 local auto_replies = {
     ["qachon warn"] = REP_WARN,
@@ -337,8 +365,8 @@ local auto_replies = {
     ["nega qamadingiz"] = REP_SHIK,
     ["meni aybim yo'q"] = REP_SHIK,
     ["sababsiz"] = REP_SHIK,
-    ["yeching"] = "Assalomu alaykum, administrator bunday jarayonlarga aralashmaydi.",
-    ["pul bering"] = "Assalomu alaykum, keyingi off-top uchun jazo qo'llaniladi."
+    ["yeching"] = "Administrator bunday jarayonlarga aralashmaydi.",
+    ["pul bering"] = "Keyingi off-top uchun jazo qo'llaniladi."
 }
 
 -- ================= RUXSAT ETILGAN BUYRUQLAR =================
@@ -547,19 +575,24 @@ function loadFAQFromFile()
 end
 
 function getFAQReply(text)
-    if not text or text == "" then 
-        return nil 
-    end
-    
+    if not text or text == "" then return nil end
     local lower = normText(text)
+    if lower == "" then return nil end
     
-    if lower == "" then 
-        return nil 
-    end
+    -- XATO SHU YERDA EDI: "dm" admin so'zining ichidan topilib qolmasligi uchun bo'sh joy qo'shib tekshiramiz
+    local clean_for_rules = " " .. lower:gsub("[%p%c]", " ") .. " "
     
     for keyword, desc in pairs(grnd_rules_database) do
-        if lower:find(keyword, 1, true) then
-            return "Assalomu alaykum, GRND qoidasiga ko'ra: " .. desc
+        if keyword:find("%.") then
+            -- Raqamli qoidalar ("1.2", "4.5" va h.k)
+            if lower:find(keyword, 1, true) then
+                return "GRND qoidasiga ko'ra: " .. desc
+            end
+        else
+            -- Harfli qisqartmalar ("dm", "tk", "sk") faqatkina to'liq so'z bo'lsagina ishlaydi
+            if clean_for_rules:find(" " .. keyword .. " ", 1, true) then
+                return "GRND qoidasiga ko'ra: " .. desc
+            end
         end
     end
 
@@ -969,9 +1002,9 @@ function getSmartReply(text, sender_name)
         
         if target_name and target_name ~= "Noma'lum" then
             if isRPNick(target_name) then 
-                return "Assalomu alaykum, ha, bu RP nik."
+                return "Ha, bu RP nik."
             else 
-                return "Assalomu alaykum, yo'q, bu Non-RP (NRP) nik." 
+                return "Yo'q, bu Non-RP (NRP) nik." 
             end
         end
     end
@@ -983,29 +1016,14 @@ function getSmartReply(text, sender_name)
     end
 
     local faq_reply = getFAQReply(text)
-    if faq_reply then
-        local clean = tostring(faq_reply)
-        clean = clean:gsub("https?://[%S]+", "")
-        clean = clean:gsub("%s+", " ")
-        clean = clean:match("^%s*(.-)%s*$")
-        
-        if clean and clean:len() > 10 then 
-            if clean:find("Assalomu alaykum") then
-                return clean:sub(1, 140) 
-            else
-                return "Assalomu alaykum, " .. clean:sub(1, 120)
-            end
-        end
-    end
+    if faq_reply then return faq_reply end
 
     local function searchMemory(priority_trusted)
         local function isTrusted(val)
             if type(val) == "table" then
                 if val[1] then
                     for _, item in ipairs(val) do 
-                        if item.trusted then 
-                            return true 
-                        end 
+                        if item.trusted then return true end 
                     end
                     return false
                 else 
@@ -1017,78 +1035,53 @@ function getSmartReply(text, sender_name)
 
         if bot_memory[lower_text] then
             local v = bot_memory[lower_text]
-            
-            if priority_trusted and not isTrusted(v) then 
-                return nil 
-            end
-            
+            if priority_trusted and not isTrusted(v) then return nil end
             return memAnswer(v)
         end
         
         if lower_text:len() >= 5 then
             for question, value in pairs(bot_memory) do
                 local q = normText(question)
-                
-                if priority_trusted and not isTrusted(value) then 
-                    goto continue_inner 
-                end
-                
+                if priority_trusted and not isTrusted(value) then goto continue_inner end
                 if q:len() >= 5 and (lower_text:find(q, 1, true) or q:find(lower_text, 1, true)) then 
                     return memAnswer(value) 
                 end
-                
                 ::continue_inner::
             end
         end
         
         local words = {}
-        
         for w in lower_text:gmatch("%S+") do
-            if w:len() > 3 then 
-                table.insert(words, w) 
-            end
+            if w:len() > 3 then table.insert(words, w) end
         end
         
         local best_mem = nil
         local best_mem_score = 0
         
         for question, value in pairs(bot_memory) do
-            if priority_trusted and not isTrusted(value) then 
-                goto continue_score 
-            end
+            if priority_trusted and not isTrusted(value) then goto continue_score end
             
             local score = 0
-            
             for _, w in ipairs(words) do
-                if question:find(w, 1, true) then 
-                    score = score + 1 
-                end
+                if question:find(w, 1, true) then score = score + 1 end
             end
             
             if score > best_mem_score then
                 best_mem_score = score
                 best_mem = memAnswer(value)
             end
-            
             ::continue_score::
         end
         
-        if best_mem_score >= 2 and best_mem then 
-            return best_mem 
-        end
-        
+        if best_mem_score >= 2 and best_mem then return best_mem end
         return nil
     end
 
     local trusted_reply = searchMemory(true)
-    if trusted_reply then 
-        return trusted_reply 
-    end
+    if trusted_reply then return trusted_reply end
     
     local normal_reply = searchMemory(false)
-    if normal_reply then 
-        return normal_reply 
-    end
+    if normal_reply then return normal_reply end
     
     return nil
 end
@@ -1105,11 +1098,11 @@ function getFallbackReply(rep_text)
     elseif lower_rep:find("ban") or lower_rep:find("warn") or lower_rep:find("mute") or lower_rep:find("jazo") then 
         return REP_WARN
     elseif lower_rep:find("pul") or lower_rep:find("mol") or lower_rep:find("buyum") then 
-        return "Assalomu alaykum, administrator o'yinchi mulkiga aralashmaydi."
+        return "Administrator o'yinchi mulkiga aralashmaydi."
     elseif lower_rep:find("uy") or lower_rep:find("biznes") then 
-        return "Assalomu alaykum, ko'chmas mulk bo'yicha tegishli bo'limga murojaat qiling."
+        return "Ko'chmas mulk bo'yicha tegishli bo'limga murojaat qiling."
     else 
-        return "Assalomu alaykum, savolingizni ko'rib chiqmoqdaman." 
+        return "Savolingizni ko'rib chiqmoqdaman." 
     end
 end
 
@@ -1930,33 +1923,41 @@ function sampev.onServerMessage(color, text)
                 javob = javob:match("^%s*(.-)%s*$") or ans
                 
                 if savol ~= "" and javob ~= "" then
-                    -- BAZAGA O'RGANISH UCHUN SAQLASH
-                    if not bot_memory[savol] then 
-                        bot_memory[savol] = {} 
+                    
+                    -- Saqlashdan oldin javobni xotira uchun toza qilib olamiz (faqat javobning o'zi qoladi)
+                    local clean_javob = javob
+                    for i=1, 3 do
+                        clean_javob = clean_javob:gsub("^[Aa]ssalomu?%s+[Aa]l[ae]ykum%s*[,%.%s]*", "")
+                        clean_javob = clean_javob:gsub("^[Aa]ssalom[%s,%.]*", "")
+                        clean_javob = clean_javob:gsub("^[Ss]alom[%s,%.]*", "")
+                        clean_javob = clean_javob:gsub("^{%x%x%x%x%x%x}%s*", "")
                     end
+                    clean_javob = clean_javob:gsub("%s+", " "):match("^%s*(.-)%s*$")
                     
-                    if type(bot_memory[savol]) == "table" and bot_memory[savol].answer then
-                        local old_ans = bot_memory[savol]
-                        bot_memory[savol] = { old_ans }
+                    if clean_javob and clean_javob:len() > 0 then
+                        clean_javob = clean_javob:sub(1,1):upper() .. clean_javob:sub(2)
+                        
+                        -- Xotiraga toza holatda saqlaymiz
+                        if not bot_memory[savol] then bot_memory[savol] = {} end
+                        if type(bot_memory[savol]) == "table" and bot_memory[savol].answer then
+                            local old_ans = bot_memory[savol]
+                            bot_memory[savol] = { old_ans }
+                        end
+                        
+                        local trusted_flag = false
+                        if is_red_ans then trusted_flag = true end
+                        local fallback_admin = "?"
+                        if ans_admin then fallback_admin = ans_admin end
+                        
+                        table.insert(bot_memory[savol], { answer = clean_javob, admin = fallback_admin, time = os.time(), trusted = trusted_flag })
+                        saveMemory()
+                        
+                        -- Aynan shu jarayon uchun nusxalangan javoblar (collected_answers) ga qoshamiz
+                        if not pend.collected_answers then pend.collected_answers = {} end
+                        table.insert(pend.collected_answers, clean_javob)
                     end
-                    
-                    local trusted_flag = false
-                    if is_red_ans then trusted_flag = true end
-                    
-                    local fallback_admin = "?"
-                    if ans_admin then fallback_admin = ans_admin end
-                    
-                    table.insert(bot_memory[savol], { answer = javob, admin = fallback_admin, time = os.time(), trusted = trusted_flag })
-                    saveMemory()
-                    
-                    -- YOKI SHU ZAXOTI O'ZIDAN FOYDALANISH UCHUN "COLLECTED ANSWERS" GA SOLISH
-                    if not pend.collected_answers then pend.collected_answers = {} end
-                    table.insert(pend.collected_answers, javob)
                 end
             end
-            
-            -- DIQQAT: Bot boshqa odam javob yozsa ham indamay to'xtatmaydi, 
-            -- pend larni o'chirmaymiz va u navbati kelganda albatta o'g'irlab olganini yuboradi!
         end
     end
 
@@ -1984,12 +1985,11 @@ function sampev.onServerMessage(color, text)
             
             prunePending()
             
-            -- REPORT KELGANDA "COLLECTED ANSWERS" LISTINI HAM OCHIB QO'YAMIZ
             pending_reports[rep_id] = { text = rep_text, time = os.time(), collected_answers = {} }
             sendTG("🔔 *YANGI REPORT KELDI!*\n👤 O'yinchi: `" .. tgSafe(rep_name) .. "` (ID: " .. rep_id .. ")\n💬 Matn: `" .. tgSafe(rep_text) .. "`")
 
             local lower_rep = rep_text:lower():match("^%s*(.-)%s*$") or ""
-            local is_plus = (lower_rep:match("^[+%s]+$") ~= nil) -- "+" MATNLI REPORTNI TOPISH
+            local is_plus = (lower_rep:match("^[+%s]+$") ~= nil)
             
             local is_flipped = false
             if lower_rep:find("ag'dar") or lower_rep:find("agdar") or lower_rep:find("to'ntar") or lower_rep:find("tontar") or lower_rep:find("flip") or lower_rep:find("korjom") or lower_rep:find("g'ildirak") then
@@ -1998,7 +1998,6 @@ function sampev.onServerMessage(color, text)
             
             local is_bad = containsBadWord(rep_text) 
 
-            -- "+" DAN TASHQARI HAMMASIGA JAVOB BERADI
             if not is_plus then
                 local q_id = rep_id
                 local q_name = rep_name
@@ -2008,7 +2007,7 @@ function sampev.onServerMessage(color, text)
                     if is_mp_active then
                         wait(math.random(4000, 7000))
                         if pending_reports[q_id] then
-                            table.insert(report_queue, { id = q_id, reply = "Assalomu aleykum, iltimos kuting.", name = q_name, text = q_text })
+                            table.insert(report_queue, { id = q_id, reply = formatFinalReply("Iltimos kuting."), name = q_name, text = q_text })
                         end
                         return
                     end
@@ -2017,34 +2016,29 @@ function sampev.onServerMessage(color, text)
                     
                     if is_flipped then
                         wait(math.random(1500, 3000))
-                        
                         sendInput("/flip " .. q_id)
-                        final_reply = "Assalomu alaykum, mashinangizni to'g'rilab qo'ydim. Ehtiyotkorroq haydang."
+                        final_reply = "Mashinangizni to'g'rilab qo'ydim. Ehtiyotkorroq haydang."
                         
                     elseif is_bad then
                         local text_len = string.len(q_text)
                         wait(math.random(2000, 4000) + (text_len * 20))
-                        
-                        final_reply = "Assalomu alaykum, server qoidalarini buzmang."
+                        final_reply = "Server qoidalarini buzmang."
                         sendTG("⚠️ *DIQQAT! So'kinish ushlandi:*\n👤 O'yinchi: `" .. tgSafe(q_name) .. "`\n💬 Matn: `" .. tgSafe(q_text) .. "`", true)
                         
                     else
-                        -- BELGILANGAN VAQT (Masalan 2 soniya) KUTADI, BO'SH VAQTIDA BOSHQA ADMINLAR YOZISHI KUTILMOQDA
                         wait(report_delay * 1000)
                         
                         local current_pend = pending_reports[q_id]
                         if current_pend then
-                            -- AGAR KUTISH VAQTIDA KIMDIR JAVOB BERGAN BO'LSA, ULARNING JAVOBINI RANDOM TANLAB YUBORADI
                             if current_pend.collected_answers and #current_pend.collected_answers > 0 then
                                 final_reply = current_pend.collected_answers[math.random(1, #current_pend.collected_answers)]
                             else
-                                -- AGAR HECH KIM JAVOB BERMAGAN BO'LSA O'Z BAZASIGA/AIGA MUROJAAT QILADI
                                 final_reply = getSmartReply(q_text, q_name)
                                 
                                 if not final_reply then
                                     local prompt = string.format([[Siz SA-MP serverida "%s" ismli administratorsiz. O'yinchi savoli: "%s".
 QOIDALAR:
-1. Bitta gapda, qisqa o'zbek tilida javob bering. Har doim bir xil salomlashmang.
+1. Bitta gapda, qisqa o'zbek tilida javob bering. Salomlashmang.
 2. O'yinchilar uchun / (slash) bilan yoziladigan buyruqlar UMMUMAN YO'Q! Shuning uchun hech qachon /komanda (masalan /works, /gps, /donate) maslahat bermang.
 3. Link ishlatmang.]], bot_name, q_text)
                                     
@@ -2064,9 +2058,12 @@ QOIDALAR:
                         end
                     end
 
-                    -- JAVOB TAYYOR BO'LSA NAVBATGA QO'SHADI
                     if final_reply and pending_reports[q_id] then
-                        table.insert(report_queue, { id = q_id, reply = final_reply, name = q_name, text = q_text })
+                        -- Barcha javoblar shunday bitta qozondan chiroyli bo'lib o'tadi
+                        final_reply = formatFinalReply(final_reply)
+                        if final_reply then
+                            table.insert(report_queue, { id = q_id, reply = final_reply, name = q_name, text = q_text })
+                        end
                     end
                 end)
             end
@@ -2359,11 +2356,6 @@ function onLoad()
                     
                     if pending_reports[task.id] then
                         local reply = task.reply
-                        
-                        if not reply or reply == "" or string.len(reply) < 4 then 
-                            reply = getFallbackReply(task.text) 
-                        end
-                        
                         sendInput("/ans " .. tostring(task.id) .. " " .. reply)
                         sendTG("✅ *Bot javob berdi:*\n👤 O'yinchi: `" .. tgSafe(task.name) .. "` (ID: " .. task.id .. ")\n❓ Savol: `" .. tgSafe(task.text) .. "`\n💬 Javob: `" .. tgSafe(reply) .. "`")
 
